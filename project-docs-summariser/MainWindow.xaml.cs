@@ -7,6 +7,8 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using Microsoft.Win32;
 
 namespace WpfAiIntegration
@@ -16,12 +18,15 @@ namespace WpfAiIntegration
         private const string ApiKey = "api_key";
         private const string ApiEndpoint = "https://api.groq.com/openai/v1/chat/completions";
         private static readonly HttpClient httpClient = new HttpClient();
+
         private List<string> selectedFilePaths = new List<string>();
 
         public MainWindow()
         {
             InitializeComponent();
+            UpdateFileListUI();
         }
+
 
         private void SelectFileButton_Click(object sender, RoutedEventArgs e)
         {
@@ -34,51 +39,141 @@ namespace WpfAiIntegration
 
             if (openFileDialog.ShowDialog() == true)
             {
-                selectedFilePaths.AddRange(openFileDialog.FileNames);
-                UpdateFileList();
+                AddFilesToList(openFileDialog.FileNames);
             }
+        }
+
+        // Handles Drag & Drop over the window
+        private void Window_DragOver(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                e.Effects = DragDropEffects.Copy;
+                FileListBoxBorder.BorderBrush = (SolidColorBrush)FindResource("PrimaryActionBrush");
+                FileListBoxBorder.Background = new SolidColorBrush(Color.FromArgb(10, 79, 70, 229));
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        }
+
+        // Handles dropping files onto the window
+        private void Window_Drop(object sender, DragEventArgs e)
+        {
+            ResetDropVisuals();
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                var textFiles = files.Where(f => Path.GetExtension(f).Equals(".txt", StringComparison.OrdinalIgnoreCase)).ToArray();
+
+                if (textFiles.Length < files.Length)
+                {
+                    UpdateStatus("Some non-text files were ignored.", "#F59E0B");
+                }
+
+                AddFilesToList(textFiles);
+            }
+        }
+
+        private void ResetDropVisuals()
+        {
+            FileListBoxBorder.BorderBrush = (SolidColorBrush)FindResource("BorderBrush");
+            FileListBoxBorder.Background = Brushes.White;
+        }
+
+        private void AddFilesToList(string[] filePaths)
+        {
+            foreach (var path in filePaths)
+            {
+                // Prevent duplicates
+                if (!selectedFilePaths.Contains(path))
+                {
+                    selectedFilePaths.Add(path);
+                }
+            }
+            UpdateFileListUI();
         }
 
         private void ClearButton_Click(object sender, RoutedEventArgs e)
         {
             selectedFilePaths.Clear();
-            UpdateFileList();
+            UpdateFileListUI();
+            OutputTextBox.Text = "Your summary will appear here after clicking 'Generate Summary'...";
+            SetOutputActionsVisibility(Visibility.Collapsed);
+            UpdateStatus("Ready");
         }
 
-        private void UpdateFileList()
+        // Handles individual file removal via the "X" button
+        private void RemoveFileButton_Click(object sender, RoutedEventArgs e)
         {
-            FileListBox.Items.Clear();
-            foreach (var filePath in selectedFilePaths)
+            Button clickedButton = sender as Button;
+            string filePathToRemove = clickedButton.DataContext as string;
+
+            if (filePathToRemove != null)
             {
-                FileListBox.Items.Add(Path.GetFileName(filePath));
+                selectedFilePaths.Remove(filePathToRemove);
+                UpdateFileListUI();
             }
-            FileCountTextBlock.Text = $"Selected files: {selectedFilePaths.Count}";
         }
+
+        private void UpdateFileListUI()
+        {
+            FileListBox.ItemsSource = null;
+            FileListBox.ItemsSource = selectedFilePaths.Select(p => Path.GetFileName(p)).ToList();
+
+            bool hasFiles = selectedFilePaths.Count > 0;
+            PlaceholderVisual.Visibility = hasFiles ? Visibility.Collapsed : Visibility.Visible;
+            SendButton.IsEnabled = hasFiles;
+
+            UpdateStatus(hasFiles ? $"{selectedFilePaths.Count} files selected" : "Ready");
+        }
+
+
 
         private async void SendButton_Click(object sender, RoutedEventArgs e)
         {
-            if (selectedFilePaths.Count == 0)
-            {
-                OutputTextBox.Text = "Please select at least one file.";
-                return;
-            }
+            if (selectedFilePaths.Count == 0) return;
+
 
             SendButton.IsEnabled = false;
-            OutputTextBox.Text = "Processing...";
+            FileListBox.IsEnabled = false;
+            SelectFileButton.IsEnabled = false;
+            ClearButton.IsEnabled = false;
+            OutputTextBox.Text = "Reading files and contacting AI model...";
+            LoadingProgress.Visibility = Visibility.Visible;
+            SetOutputActionsVisibility(Visibility.Collapsed);
+            UpdateStatus("Processing...", "#4F46E5");
 
             try
             {
                 string combinedContent = CombineFileContents();
-                string aiResponse = await GetAiResponseAsync(combinedContent);
+
+                StringBuilder prompt = new StringBuilder();
+                prompt.AppendLine("You are an expert document analyst. Please provide a clear, comprehensive summary of the following text documents.");
+                prompt.AppendLine("Use bullet points for key takeaways and ensure the summary merges information from all files logically.");
+                prompt.AppendLine("\n--- BEGIN DOCUMENTS ---\n");
+                prompt.AppendLine(combinedContent);
+                prompt.AppendLine("\n--- END DOCUMENTS ---");
+
+                string aiResponse = await GetAiResponseAsync(prompt.ToString());
                 OutputTextBox.Text = aiResponse;
+                UpdateStatus("Summary generated successfully", "#10B981");
+                SetOutputActionsVisibility(Visibility.Visible);
             }
             catch (Exception ex)
             {
-                OutputTextBox.Text = $"Error: {ex.Message}";
+                OutputTextBox.Text = $"Error generating summary.\n\nDetails: {ex.Message}";
+                UpdateStatus("Error", "#EF4444");
             }
             finally
             {
                 SendButton.IsEnabled = true;
+                FileListBox.IsEnabled = true;
+                SelectFileButton.IsEnabled = true;
+                ClearButton.IsEnabled = true;
+                LoadingProgress.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -88,15 +183,19 @@ namespace WpfAiIntegration
             for (int i = 0; i < selectedFilePaths.Count; i++)
             {
                 string fileName = Path.GetFileName(selectedFilePaths[i]);
-                string fileContent = File.ReadAllText(selectedFilePaths[i]);
-                
-                combinedContent.AppendLine($"=== File: {fileName} ===");
-                combinedContent.AppendLine(fileContent);
-                
-                if (i < selectedFilePaths.Count - 1)
+                string fileContent = "Could not read file.";
+                try
                 {
-                    combinedContent.AppendLine();
+                    fileContent = File.ReadAllText(selectedFilePaths[i]);
                 }
+                catch (Exception ex)
+                {
+                    fileContent = $"[Error reading file: {ex.Message}]";
+                }
+
+                combinedContent.AppendLine($"### DOCUMENT {i + 1}: {fileName} ###");
+                combinedContent.AppendLine(fileContent);
+                combinedContent.AppendLine();
             }
             return combinedContent.ToString();
         }
@@ -109,7 +208,8 @@ namespace WpfAiIntegration
                 messages = new[]
                 {
                     new { role = "user", content = message }
-                }
+                },
+                temperature = 0.5
             };
 
             string jsonBody = JsonSerializer.Serialize(requestBody);
@@ -133,5 +233,54 @@ namespace WpfAiIntegration
                 }
             }
         }
+
+  
+
+        private void SetOutputActionsVisibility(Visibility visibility)
+        {
+            CopyButton.Visibility = visibility;
+            SaveButton.Visibility = visibility;
+        }
+
+        private void CopyButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrWhiteSpace(OutputTextBox.Text))
+            {
+                Clipboard.SetText(OutputTextBox.Text);
+                UpdateStatus("Summary copied to clipboard");
+            }
+        }
+
+        private void SaveButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(OutputTextBox.Text)) return;
+
+            SaveFileDialog saveFileDialog = new SaveFileDialog
+            {
+                Filter = "Text File (*.txt)|*.txt",
+                DefaultExt = "txt",
+                FileName = $"Summary_{DateTime.Now:yyyyMMdd_HHmm}.txt",
+                Title = "Save Summary As"
+            };
+
+            if (saveFileDialog.ShowDialog() == true)
+            {
+                File.WriteAllText(saveFileDialog.FileName, OutputTextBox.Text);
+                UpdateStatus($"Summary saved to {Path.GetFileName(saveFileDialog.FileName)}");
+            }
+        }
+
+        
+        private void UpdateStatus(string text, string hexColor = "#6B7280")
+        {
+            StatusTextBlock.Text = text;
+            try
+            {
+                StatusDot.Fill = (SolidColorBrush)new CornerRadiusConverter().ConvertFromString(hexColor);
+                StatusDot.Fill = (SolidColorBrush)new BrushConverter().ConvertFromString(hexColor);
+            }
+            catch {}
+        }
+
     }
 }
