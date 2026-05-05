@@ -11,6 +11,11 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
 
+// --- PACKAGES FOR DOCUMENT PARSING ---
+using UglyToad.PdfPig;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+
 namespace WpfAiIntegration
 {
     public partial class MainWindow : Window
@@ -19,13 +24,13 @@ namespace WpfAiIntegration
         private static readonly HttpClient httpClient = new HttpClient();
         private List<string> selectedFilePaths = new List<string>();
 
-        // Architecture Paths
         private readonly string SettingsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
         private readonly string HistoryFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "history.json");
 
-        // State
         private AppConfig _config = new AppConfig();
         private List<HistoryEntry> _history = new List<HistoryEntry>();
+
+        private readonly string[] AllowedExtensions = { ".txt", ".pdf", ".docx" };
 
         public MainWindow()
         {
@@ -127,7 +132,6 @@ namespace WpfAiIntegration
                 FileNames = fileNames
             });
 
-            // Keep only the last 50 to prevent huge files
             if (_history.Count > 50) _history = _history.Take(50).ToList();
 
             File.WriteAllText(HistoryFilePath, JsonSerializer.Serialize(_history));
@@ -159,7 +163,12 @@ namespace WpfAiIntegration
 
         private void SelectFileButton_Click(object sender, RoutedEventArgs e)
         {
-            OpenFileDialog dialog = new OpenFileDialog { Filter = "Text Files (*.txt)|*.txt", Multiselect = true };
+            OpenFileDialog dialog = new OpenFileDialog
+            {
+                Filter = "Supported Documents (*.txt, *.pdf, *.docx)|*.txt;*.pdf;*.docx|All Files (*.*)|*.*",
+                Multiselect = true
+            };
+
             if (dialog.ShowDialog() == true) AddFilesToList(dialog.FileNames);
         }
 
@@ -174,7 +183,15 @@ namespace WpfAiIntegration
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                AddFilesToList(files.Where(f => Path.GetExtension(f).ToLower() == ".txt").ToArray());
+
+                var supportedFiles = files.Where(f => AllowedExtensions.Contains(Path.GetExtension(f).ToLower())).ToArray();
+
+                if (supportedFiles.Length < files.Length)
+                {
+                    UpdateStatus("Some unsupported files were ignored.");
+                }
+
+                AddFilesToList(supportedFiles);
             }
         }
 
@@ -228,21 +245,31 @@ namespace WpfAiIntegration
             SendButton.IsEnabled = false;
             LoadingProgress.Visibility = Visibility.Visible;
             OutputTextBox.Text = "Reading files and contacting AI model...";
-            UpdateStatus("Processing...");
+            UpdateStatus("Processing Documents...");
 
             try
             {
-                string combinedContent = CombineFileContents();
-                string prompt = "Provide a comprehensive summary of these documents using bullet points:\n\n" + combinedContent;
+                string combinedContent = await Task.Run(() => CombineFileContents());
 
+                // Read what the user selected in the UI
+                string selectedStyle = ((ComboBoxItem)StyleComboBox.SelectedItem).Content.ToString();
+                string selectedLength = ((ComboBoxItem)LengthComboBox.SelectedItem).Content.ToString();
+
+                // Build a custom prompt based on their choices
+                string prompt = $"You are an expert document analyst. Provide a {selectedLength} summary of the following documents.\n" +
+                                $"Format the output as: {selectedStyle}.\n\n" +
+                                $"--- BEGIN DOCUMENTS ---\n{combinedContent}\n--- END DOCUMENTS ---";
+
+                UpdateStatus("AI is generating summary...");
                 string aiResponse = await GetAiResponseAsync(prompt);
+
                 OutputTextBox.Text = aiResponse;
 
                 string fileNames = string.Join(", ", selectedFilePaths.Select(Path.GetFileName));
                 SaveHistoryEntry(aiResponse, fileNames);
 
                 SetOutputActionsVisibility(Visibility.Visible);
-                UpdateStatus("Summary generated.");
+                UpdateStatus("Summary generated successfully.");
             }
             catch (Exception ex)
             {
@@ -261,11 +288,66 @@ namespace WpfAiIntegration
             StringBuilder sb = new StringBuilder();
             foreach (var path in selectedFilePaths)
             {
-                sb.AppendLine($"### {Path.GetFileName(path)} ###");
-                sb.AppendLine(File.ReadAllText(path));
+                sb.AppendLine($"### DOCUMENT: {Path.GetFileName(path)} ###");
+
+                string extension = Path.GetExtension(path).ToLower();
+                string fileContent = "";
+
+                try
+                {
+                    if (extension == ".pdf")
+                    {
+                        fileContent = ExtractTextFromPdf(path);
+                    }
+                    else if (extension == ".docx")
+                    {
+                        fileContent = ExtractTextFromDocx(path);
+                    }
+                    else
+                    {
+                        fileContent = File.ReadAllText(path);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    fileContent = $"[FAILED TO READ FILE: {ex.Message}]";
+                }
+
+                sb.AppendLine(fileContent);
                 sb.AppendLine();
             }
             return sb.ToString();
+        }
+
+        private string ExtractTextFromPdf(string filePath)
+        {
+            StringBuilder text = new StringBuilder();
+            using (UglyToad.PdfPig.PdfDocument document = UglyToad.PdfPig.PdfDocument.Open(filePath))
+            {
+                foreach (UglyToad.PdfPig.Content.Page page in document.GetPages())
+                {
+                    text.AppendLine(page.Text);
+                }
+            }
+            return text.ToString();
+        }
+        
+
+        private string ExtractTextFromDocx(string filePath)
+        {
+            StringBuilder text = new StringBuilder();
+            using (WordprocessingDocument wordDoc = WordprocessingDocument.Open(filePath, false))
+            {
+                var body = wordDoc.MainDocumentPart?.Document.Body;
+                if (body != null)
+                {
+                    foreach (var para in body.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>())
+                    {
+                        text.AppendLine(para.InnerText);
+                    }
+                }
+            }
+            return text.ToString();
         }
 
         private async Task<string> GetAiResponseAsync(string message)
