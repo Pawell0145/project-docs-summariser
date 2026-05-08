@@ -1,7 +1,7 @@
 ﻿<Window x:Class="project_docs_summariser.StudyWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Study Mode" Height="600" Width="800"
+        Title="Study Mode" Height="800" Width="800"
         WindowStartupLocation="CenterScreen"
         Background="#1E1E1E" Foreground="#E0E0E0" FontFamily="Segoe UI">
 
@@ -24,16 +24,54 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <TextBlock x:Name="CurrentDayTitle" Grid.Row="0" Text="DAY #1" FontSize="28" FontWeight="Bold" Foreground="#007ACC" Margin="0,0,0,15" HorizontalAlignment="Center"/>
+            <Grid Grid.Row="0" Margin="0,0,0,15">
+                <TextBlock x:Name="CurrentDayTitle" Text="DAY #1" FontSize="28" FontWeight="Bold" Foreground="#007ACC" HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
+                <Button x:Name="QuizButton" Content="DAILY QUIZ" Width="110" Height="32" 
+                        HorizontalAlignment="Right" VerticalAlignment="Center" 
+                        Click="TakeQuizButton_Click" Cursor="Hand">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="#313131" CornerRadius="16" BorderBrush="#555" BorderThickness="1">
+                                <TextBlock Text="{TemplateBinding Content}" Foreground="WhiteSmoke" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                 <TextBlock x:Name="StudyContentText" TextWrapping="Wrap" FontSize="16" LineHeight="24" Foreground="#D4D4D4">
-                    Tutaj pojawi się treść wygenerowana przez AI... 
-                    Zostanie ona ładnie sformatowana, a tekst będzie można swobodnie przewijać w dół, jeśli będzie go dużo.
+                    
                 </TextBlock>
             </ScrollViewer>
+
+            <Grid Grid.Row="2" Margin="0,15,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Background="#2D2D30" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="8" Margin="0,0,10,0">
+                    <TextBox x:Name="ChatInputTextBox" Background="Transparent" Foreground="White" BorderThickness="0" 
+                             Padding="10,8" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" 
+                             AcceptsReturn="True" ToolTip="Ask AI about this day's material..."/>
+                </Border>
+
+                <Button x:Name="AskAiButton" Content="Ask AI" Grid.Column="1" Width="80" Height="38" Click="AskAiButton_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="#007ACC" CornerRadius="8">
+                                <TextBlock Text="{TemplateBinding Content}" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+
         </Grid>
+        
     </Grid>
 </Window>

@@ -11,10 +11,11 @@
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Padding" Value="10,5"/>
             <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="5">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -32,11 +33,23 @@
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderBrush" Value="#3F3F46"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="5"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="5">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="0"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="20">
+    <Grid Margin="25">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -45,9 +58,9 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="CREATE NEW PLAN" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,20" Foreground="#007ACC"/>
+        <TextBlock Grid.Row="0" Text="CREATE NEW PLAN" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,25" Foreground="#007ACC"/>
 
-        <Grid Grid.Row="1" Margin="0,0,0,15">
+        <Grid Grid.Row="1" Margin="0,0,0,20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="2*"/>
                 <ColumnDefinition Width="1*"/>
@@ -55,41 +68,43 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                <TextBlock Text="SUBJECT" Margin="0,0,0,5" Foreground="#AAAAAA"/>
-                <TextBox x:Name="TopicTextBox" Height="30"/>
+                <TextBlock Text="SUBJECT" Margin="0,0,0,5" Foreground="#AAAAAA" FontSize="12" FontWeight="SemiBold"/>
+                <TextBox x:Name="TopicTextBox" Height="32"/>
             </StackPanel>
 
             <StackPanel Grid.Column="1" Margin="0,0,10,0">
-                <TextBlock Text="DAYS" Margin="0,0,0,5" Foreground="#AAAAAA"/>
-                <TextBox x:Name="DaysTextBox" Height="30" PreviewTextInput="NumberValidationTextBox"/>
+                <TextBlock Text="DAYS" Margin="0,0,0,5" Foreground="#AAAAAA" FontSize="12" FontWeight="SemiBold"/>
+                <TextBox x:Name="DaysTextBox" Height="32" PreviewTextInput="NumberValidationTextBox"/>
             </StackPanel>
 
             <StackPanel Grid.Column="2">
-                <TextBlock Text="TIME" Margin="0,0,0,5" Foreground="#AAAAAA"/>
-                <TextBox x:Name="HoursTextBox" Height="30" PreviewTextInput="NumberValidationTextBox"/>
+                <TextBlock Text="HOURS" Margin="0,0,0,5" Foreground="#AAAAAA" FontSize="12" FontWeight="SemiBold"/>
+                <TextBox x:Name="HoursTextBox" Height="32" PreviewTextInput="NumberValidationTextBox"/>
             </StackPanel>
         </Grid>
 
-        <StackPanel Grid.Row="2" Margin="0,0,0,15">
-            <TextBlock Text="SOURCE (Files)" Margin="0,0,0,5" Foreground="#AAAAAA"/>
+        <StackPanel Grid.Row="2" Margin="0,0,0,20">
+            <TextBlock Text="SOURCE (Files)" Margin="0,0,0,5" Foreground="#AAAAAA" FontSize="12" FontWeight="SemiBold"/>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <ListBox x:Name="FilesListBox" Grid.Column="0" Height="70" Margin="0,0,10,0" Background="#2D2D30" Foreground="White" BorderBrush="#3F3F46"/>
-                <Button Grid.Column="1" Content="..." Width="35" Height="30" VerticalAlignment="Top" Click="SelectFiles_Click" Background="#3F3F46"/>
+                <Border Grid.Column="0" Margin="0,0,10,0" Background="#2D2D30" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="5">
+                    <ListBox x:Name="FilesListBox" Height="70" Background="Transparent" Foreground="White" BorderThickness="0"/>
+                </Border>
+                <Button Grid.Column="1" Content="+" Width="35" Height="35" VerticalAlignment="Top" Click="SelectFiles_Click" FontSize="18"/>
             </Grid>
         </StackPanel>
 
-        <StackPanel Grid.Row="3" Margin="0,0,0,15">
-            <TextBlock Text="NOTES / PREFERENCES" Margin="0,0,0,5" Foreground="#AAAAAA"/>
-            <TextBox x:Name="NotesTextBox" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="100"/>
+        <StackPanel Grid.Row="3" Margin="0,0,0,20">
+            <TextBlock Text="NOTES / PREFERENCES" Margin="0,0,0,5" Foreground="#AAAAAA" FontSize="12" FontWeight="SemiBold"/>
+            <TextBox x:Name="NotesTextBox" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="120"/>
         </StackPanel>
 
         <Grid Grid.Row="4" Margin="0,10,0,0">
-            <Button Content="CANCEL" Width="100" Height="35" HorizontalAlignment="Left" Click="Cancel_Click" Background="#4A4A4A"/>
-            <Button Content="CREATE" Width="100" Height="35" HorizontalAlignment="Right" Background="#28A745" Foreground="White" FontWeight="Bold" Click="CreatePlan_Click"/>
+            <Button Content="CANCEL" Width="110" Height="38" HorizontalAlignment="Left" Click="Cancel_Click" Background="#4A4A4A"/>
+            <Button Content="CREATE" Width="110" Height="38" HorizontalAlignment="Right" Background="#28A745" Foreground="White" FontWeight="Bold" Click="CreatePlan_Click"/>
         </Grid>
     </Grid>
 </Window>

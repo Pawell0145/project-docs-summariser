@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32;
+using project_docs_summariser;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,9 +16,6 @@ namespace WpfAiIntegration
 {
     public partial class CreatePlanWindow : Window
     {
-        private const string ApiKey = "apikey";
-        private const string ApiEndpoint = "https://api.groq.com/openai/v1/chat/completions";
-        private static readonly HttpClient httpClient = new HttpClient();
         public List<string> SelectedFiles { get; private set; } = new List<string>();
 
         public string GeneratedPlan { get; private set; }
@@ -100,7 +98,7 @@ namespace WpfAiIntegration
                     prompt += $"\n\nThe user did not provide any specific materials. Base the schedule on your general knowledge of the topic.";
                 }
 
-                GeneratedPlan = await GetAiResponseAsync(prompt);
+                GeneratedPlan = await AiService.GetResponseAsync(prompt);
 
                 this.DialogResult = true;
             }
@@ -132,36 +130,6 @@ namespace WpfAiIntegration
             return combinedContent.ToString();
         }
 
-        private async Task<string> GetAiResponseAsync(string message)
-        {
-            var requestBody = new
-            {
-                model = "llama-3.3-70b-versatile",
-                messages = new[]
-                {
-                    new { role = "user", content = message }
-                }
-            };
-
-            string jsonBody = JsonSerializer.Serialize(requestBody);
-            var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-
-            using (var requestMessage = new HttpRequestMessage(HttpMethod.Post, ApiEndpoint))
-            {
-                requestMessage.Headers.Add("Authorization", $"Bearer {ApiKey}");
-                requestMessage.Content = content;
-
-                var response = await httpClient.SendAsync(requestMessage);
-                response.EnsureSuccessStatusCode();
-
-                string responseBody = await response.Content.ReadAsStringAsync();
-
-                using (JsonDocument doc = JsonDocument.Parse(responseBody))
-                {
-                    JsonElement root = doc.RootElement;
-                    return root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
-                }
-            }
-        }
+              
     }
 }
