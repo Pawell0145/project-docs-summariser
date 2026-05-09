@@ -11,6 +11,8 @@
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Margin" Value="10"/>
             <Setter Property="Padding" Value="15"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderBrush" Value="#3F3F46"/>
             <Setter Property="ContentTemplate">
                 <Setter.Value>
                     <DataTemplate>
@@ -21,17 +23,23 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="#3F3F46" BorderThickness="2" CornerRadius="8">
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="2" CornerRadius="8"/>
+
+                            <Border x:Name="HoverOverlay" Background="White" Opacity="0" CornerRadius="8"/>
+
                             <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
-                        </Border>
+                        </Grid>
+
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#3E3E42"/>
+                                <Setter TargetName="HoverOverlay" Property="Opacity" Value="0.1"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="HoverOverlay" Property="Opacity" Value="0.2"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter Property="Background" Value="#007ACC"/>
-                                <Setter Property="BorderBrush" Value="#005A9E"/>
-                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderBrush" Value="#007ACC"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -80,7 +88,14 @@
 
             <Grid Grid.Row="0" Margin="0,0,0,20">
                 <TextBlock x:Name="CurrentQuesTitle" Text="1# QUESTION" FontWeight="Bold" Foreground="BurlyWood" FontSize="26" VerticalAlignment="Center"/>
-                <Button x:Name="NextQuestionBtn" Content="NEXT" Width="90" Height="35" HorizontalAlignment="Right" Background="#007ACC" Click="NextQuestionBtn_Click"/>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="PreviousBtn" Content="PREVIOUS" Width="90" Height="35" Margin="0,0,10,0" 
+                            Background="#4A4A4A" Visibility="Hidden" Click="PreviousBtn_Click"/>
+
+                    <Button x:Name="NextQuestionBtn" Content="NEXT" Width="90" Height="35" 
+                            Background="#007ACC" Click="NextQuestionBtn_Click"/>
+                </StackPanel>
             </Grid>
 
             <TextBlock x:Name="QuestionTextBlock" Grid.Row="1" Text="Question" FontSize="18" TextWrapping="Wrap" Margin="0,0,0,20" Foreground="#D4D4D4"/>
@@ -95,10 +110,10 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <RadioButton x:Name="OptionA" Grid.Row="0" Grid.Column="0" Content="A. " Style="{StaticResource QuizOptionStyle}" FontSize="16"/>
-                <RadioButton x:Name="OptionB" Grid.Row="0" Grid.Column="1" Content="B. " Style="{StaticResource QuizOptionStyle}" FontSize="16"/>
-                <RadioButton x:Name="OptionC" Grid.Row="1" Grid.Column="0" Content="C. " Style="{StaticResource QuizOptionStyle}" FontSize="16"/>
-                <RadioButton x:Name="OptionD" Grid.Row="1" Grid.Column="1" Content="D. " Style="{StaticResource QuizOptionStyle}" FontSize="16"/>
+                <RadioButton x:Name="OptionA" Grid.Row="0" Grid.Column="0" Content="A. " Style="{StaticResource QuizOptionStyle}" FontSize="16" Checked="Option_StateChanged" Unchecked="Option_StateChanged" PreviewMouseLeftButtonDown="Option_PreviewMouseDown"/>
+                <RadioButton x:Name="OptionB" Grid.Row="0" Grid.Column="1" Content="B. " Style="{StaticResource QuizOptionStyle}" FontSize="16" Checked="Option_StateChanged" Unchecked="Option_StateChanged" PreviewMouseLeftButtonDown="Option_PreviewMouseDown"/>
+                <RadioButton x:Name="OptionC" Grid.Row="1" Grid.Column="0" Content="C. " Style="{StaticResource QuizOptionStyle}" FontSize="16" Checked="Option_StateChanged" Unchecked="Option_StateChanged" PreviewMouseLeftButtonDown="Option_PreviewMouseDown"/>
+                <RadioButton x:Name="OptionD" Grid.Row="1" Grid.Column="1" Content="D. " Style="{StaticResource QuizOptionStyle}" FontSize="16" Checked="Option_StateChanged" Unchecked="Option_StateChanged" PreviewMouseLeftButtonDown="Option_PreviewMouseDown"/>
             </Grid>
 
             <ProgressBar x:Name="QuizProgressBar" Grid.Row="3" Height="12" Margin="0,20,0,0" Value="0" Maximum="100" Foreground="#28A745" Background="#2D2D30" BorderThickness="0"/>
