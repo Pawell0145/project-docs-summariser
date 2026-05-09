@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net.NetworkInformation;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
@@ -8,6 +9,8 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using static System.Net.Mime.MediaTypeNames;
+using System.Text.Json;
 
 namespace project_docs_summariser
 {
@@ -15,14 +18,18 @@ namespace project_docs_summariser
     {
         private Dictionary<string, string> dayContents = new Dictionary<string, string>();
         private bool isSidebarExpanded = true;
-
+        private int totalDays;
+        private int hoursPerDay;
+        
         public StudyWindow()
         {
             InitializeComponent();
         }
 
-        public void LoadPlan(string rawPlan)
+        public void LoadPlan(string rawPlan, int days, int hours)
         {
+            totalDays = days;
+            hoursPerDay = hours;
             dayContents.Clear();
             DaysSidebarList.Items.Clear();
 
@@ -62,8 +69,9 @@ namespace project_docs_summariser
             }
 
             ListBoxItem quizItem = new ListBoxItem();
-            quizItem.Content = "Summary";
-            quizItem.Foreground = Brushes.DeepSkyBlue;
+            quizItem.Content = "🔒 Summary";
+            quizItem.Foreground = Brushes.Gray;
+            quizItem.IsEnabled = false;
             quizItem.Tag = "Summary";
             DaysSidebarList.Items.Add(quizItem);
 
@@ -81,17 +89,28 @@ namespace project_docs_summariser
 
                 if (selectedDay == "Summary")
                 {
-                    CurrentDayTitle.Text = "QUIZ TIME";
-                    StudyContentText.Text = "Dynamic quizzes will be generated here to test your weak spots!";
+                    CurrentDayTitle.Text = "FINAL EXAM";
+
+                    if (dayContents.ContainsKey("Summary"))
+                    {
+                        QuizButton.Content = "TRY AGAIN";
+                        _ = AnimateAiResponseAsync(dayContents["Summary"], true);
+                    }
+                    else
+                    {
+                        QuizButton.Content = "START EXAM";
+                        StudyContentText.Text = "You have unlocked the Final Exam! Click 'START EXAM' above to generate your assessment.";
+                    }
                 }
                 else if (dayContents.ContainsKey(selectedDay))
                 {
                     CurrentDayTitle.Text = selectedDay.ToUpper();
+                    QuizButton.Content = "DAILY QUIZ";
                     _ = AnimateAiResponseAsync(dayContents[selectedDay], true);
                 }
             }
         }
-
+        
         private async void AskAiButton_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(ChatInputTextBox.Text)) return;
@@ -139,22 +158,118 @@ namespace project_docs_summariser
             }
         }
 
-        private void TakeQuizButton_Click(object sender, RoutedEventArgs e)
+        private async void TakeQuizButton_Click(object sender, RoutedEventArgs e)
         {
             if (DaysSidebarList.SelectedItem is ListBoxItem selectedItem)
             {
                 string exactKey = selectedItem.Tag.ToString();
 
-                if (dayContents.ContainsKey(exactKey))
+                if (exactKey == "Summary")
+                {
+                    await GenerateAndStartFinalExam();
+                }
+                else if (dayContents.ContainsKey(exactKey))
                 {
                     string textToTest = dayContents[exactKey];
                     Hide();
                     QuizWindow quizWindow = new QuizWindow(textToTest);
                     quizWindow.ShowDialog();
                     Show();
-                    if (quizWindow.PassedQuiz) { UnlockNextDay(); }
-
+                    if (quizWindow.PassedQuiz)
+                    {
+                        UnlockNextDay();
+                    }
                 }
+                UnlockNextDay();
+            }
+        }
+
+        private async Task GenerateAndStartFinalExam()
+        {
+            QuizButton.IsEnabled = false;
+            QuizButton.Content = "GENERATING...";
+            DaysSidebarList.IsEnabled = false;
+            StudyContentText.Text = "AI is analyzing your entire material and preparing the final academic assessment. Please wait...";
+
+            try
+            {
+                int taskCount = Math.Min(15, Math.Max(5, (totalDays * hoursPerDay)));
+
+                string allDaysText = string.Join("\n\n", dayContents.Values);
+                string prompt = $@"You are an elite University Examiner. 
+                            CONTEXT: This is a final exam for a course that lasted {totalDays} days, {hoursPerDay} hours per day.
+
+                            STUDY MATERIAL:
+                            {allDaysText}
+
+                            INSTRUCTIONS:
+                            1. Generate EXACTLY {taskCount} tasks.
+                            2. Analyze the material and pick ONLY 2-3 most relevant TaskTypes from the list: [MultipleChoice, ShortAnswer, Essay, Calculation, CaseStudy, FillInTheBlanks, CodeSnippet].
+                               - CRITICAL: If the subject is Humanistic, DO NOT use Calculation or CodeSnippet. 
+                               - If the subject is Technical, prioritize Calculation/Code/ShortAnswer.
+                            3. You MUST return ONLY a valid JSON object. Do not include any extraneous text.
+
+                            JSON SCHEMA EXAMPLES (Use exact TaskType values: MultipleChoice, ShortAnswer, Essay, Calculation, CaseStudy, FillInTheBlanks, CodeSnippet):
+
+                            {{
+                              ""DetectedSubject"": ""Computer Science - Algorithms"",
+                              ""Tasks"": [
+                                {{
+                                  ""Type"": ""MultipleChoice"",
+                                  ""Instruction"": ""Which sorting algorithm has O(n log n) worst-case time complexity?"",
+                                  ""Options"": [""Merge Sort"", ""Quick Sort"", ""Bubble Sort""]
+                                }},
+                                {{
+                                  ""Type"": ""ShortAnswer"",
+                                  ""Instruction"": ""Define polymorphism in one sentence."",
+                                  ""Options"": []
+                                }}
+                              ]
+                            }}";
+
+                string aiResponse = await AiService.GetResponseAsync(prompt);
+                int startIndex = aiResponse.IndexOf('{');
+                int endIndex = aiResponse.LastIndexOf('}');
+
+                if (startIndex >= 0 && endIndex >= startIndex)
+                {
+                    aiResponse = aiResponse.Substring(startIndex, endIndex - startIndex + 1);
+                }
+
+                var examOptions = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var exam = System.Text.Json.JsonSerializer.Deserialize<SummaryGeneration.SummaryExam>(aiResponse, examOptions);
+
+                if (exam != null && exam.Tasks.Count > 0)
+                {
+                    this.Hide();
+
+                    SummaryWindow summaryWin = new SummaryWindow(exam);
+                    summaryWin.ShowDialog();
+
+                    this.Show();
+                    if (!string.IsNullOrEmpty(summaryWin.FinalGradingReport))
+                    {
+                        dayContents["Summary"] = summaryWin.FinalGradingReport;
+                        QuizButton.Content = "TRY AGAIN";
+                        await AnimateAiResponseAsync(summaryWin.FinalGradingReport, true);
+                    }
+                    else
+                    {
+                        StudyContentText.Text = "Exam was cancelled. Click 'START EXAM' to try again.";
+                        QuizButton.Content = "START EXAM";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error generating exam: {ex.Message}");
+                StudyContentText.Text = "Failed to generate the exam. Try again later.";
+                QuizButton.Content = "START EXAM";
+            }
+            finally
+            {
+                QuizButton.IsEnabled = true;
+                DaysSidebarList.IsEnabled = true;
             }
         }
 
@@ -179,6 +294,8 @@ namespace project_docs_summariser
 
                 if (nextTitle == "Summary")
                 {
+                    nextItem.Content = "🎓 Summary";
+                    nextItem.Foreground = Brushes.DeepSkyBlue;
                     nextItem.IsEnabled = true;
                 }
                 else

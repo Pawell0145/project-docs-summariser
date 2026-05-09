@@ -7,6 +7,27 @@
         Background="#1E1E1E" Foreground="#E0E0E0" FontFamily="Segoe UI">
 
     <Window.Resources>
+        <Style TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBox">
+                        <Border Background="{TemplateBinding Background}" BorderThickness="0">
+                            <ScrollViewer Focusable="false" Padding="{TemplateBinding Padding}">
+                                <ItemsPresenter />
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <Style TargetType="ListBoxItem">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Padding" Value="15,10,15,10"/>
@@ -133,7 +154,7 @@
                     </Button.Template>
                 </Button>
 
-                <ListBox x:Name="DaysSidebarList" Grid.Row="1" Background="Transparent" BorderThickness="0" Foreground="White" FontSize="15" SelectionChanged="DaysSidebarList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Hidden" Margin="0,5,0,0">
+                <ListBox x:Name="DaysSidebarList" Grid.Row="1" Foreground="White" FontSize="15" SelectionChanged="DaysSidebarList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Hidden" Margin="0,5,0,0">
                 </ListBox>
             </Grid>
         </Border>
@@ -153,9 +174,17 @@
                         Click="TakeQuizButton_Click" Cursor="Hand">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border Background="#313131" CornerRadius="16" BorderBrush="#555" BorderThickness="1">
+                            <Border x:Name="QuizBorder" Background="#313131" CornerRadius="16" BorderBrush="#555" BorderThickness="1">
                                 <TextBlock Text="{TemplateBinding Content}" Foreground="WhiteSmoke" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="QuizBorder" Property="Background" Value="#4A4A4A"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="QuizBorder" Property="Background" Value="#1E1E1E"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>
                 </Button>
@@ -177,12 +206,23 @@
                              PreviewKeyDown="ChatInputTextBox_PreviewKeyDown"/>
                 </Border>
 
-                <Button x:Name="AskAiButton" Content="Ask AI" Grid.Column="1" Width="80" Height="38" Click="AskAiButton_Click">
+                <Button x:Name="AskAiButton" Content="Ask AI" Grid.Column="1" Width="80" Height="38" Click="AskAiButton_Click" Cursor="Hand">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border Background="#007ACC" CornerRadius="8">
+                            <Border x:Name="AiBorder" Background="#007ACC" CornerRadius="8">
                                 <TextBlock Text="{TemplateBinding Content}" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="AiBorder" Property="Background" Value="#0098FF"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="AiBorder" Property="Background" Value="#005A9E"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="AiBorder" Property="Background" Value="#555555"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>
                 </Button>

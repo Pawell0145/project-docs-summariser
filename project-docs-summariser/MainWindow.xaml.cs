@@ -19,11 +19,15 @@ namespace WpfAiIntegration
             bool? result = createWindow.ShowDialog();
             if (result == true && !string.IsNullOrEmpty(createWindow.GeneratedPlan))
             {
+                int days = 0;
+                int hours = 0;
+                int.TryParse(createWindow.DaysTextBox.Text, out days);
+                int.TryParse(createWindow.HoursTextBox.Text, out hours);
+
                 StudyWindow studyWindow = new StudyWindow();
-                studyWindow.LoadPlan(createWindow.GeneratedPlan);
+                studyWindow.LoadPlan(createWindow.GeneratedPlan, days, hours);
                 studyWindow.Show();
             }
-
         }
     }
 }
