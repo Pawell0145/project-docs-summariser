@@ -34,7 +34,7 @@ namespace project_docs_summariser
 
             try
             {
-                string prompt = $"You are an AI tutor. Generate one multiple-choice questions based strictly on the following text:\n\n{text}\n\n" +
+                string prompt = $"You are an AI tutor. Generate three multiple-choice questions based strictly on the following text:\n\n{text}\n\n" +
                 @"You MUST return ONLY a valid JSON array of objects. Do not include any extraneous text (e.g., 'Here is your JSON') and do NOT wrap it in markdown code blocks like ```json. " +
                 @"Follow this exact JSON format:
                     [
@@ -138,11 +138,13 @@ namespace project_docs_summariser
                 ResultTitle.Text = "CONGRATULATIONS!";
                 ResultTitle.Foreground = Brushes.LimeGreen;
                 PassedQuiz = true;
+                TryAgainBtn.Visibility = Visibility.Collapsed;
             }
             else
             {
                 ResultTitle.Text = "TRY AGAIN!";
                 ResultTitle.Foreground = Brushes.OrangeRed;
+                TryAgainBtn.Visibility = Visibility.Visible;
             }
         }
 

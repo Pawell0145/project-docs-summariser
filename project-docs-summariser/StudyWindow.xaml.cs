@@ -1,23 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 
 namespace project_docs_summariser
 {
-
     public partial class StudyWindow : Window
     {
         private Dictionary<string, string> dayContents = new Dictionary<string, string>();
+        private bool isSidebarExpanded = true;
 
         public StudyWindow()
         {
@@ -65,10 +62,9 @@ namespace project_docs_summariser
             }
 
             ListBoxItem quizItem = new ListBoxItem();
-            quizItem.Content = "Quiz";
-            quizItem.Padding = new Thickness(15, 10, 15, 10);
+            quizItem.Content = "Summary";
             quizItem.Foreground = Brushes.DeepSkyBlue;
-            quizItem.FontWeight = FontWeights.Bold;
+            quizItem.Tag = "Summary";
             DaysSidebarList.Items.Add(quizItem);
 
             if (DaysSidebarList.Items.Count > 0)
@@ -83,7 +79,7 @@ namespace project_docs_summariser
             {
                 string selectedDay = selectedItem.Tag.ToString();
 
-                if (selectedDay == "Quiz")
+                if (selectedDay == "Summary")
                 {
                     CurrentDayTitle.Text = "QUIZ TIME";
                     StudyContentText.Text = "Dynamic quizzes will be generated here to test your weak spots!";
@@ -91,17 +87,14 @@ namespace project_docs_summariser
                 else if (dayContents.ContainsKey(selectedDay))
                 {
                     CurrentDayTitle.Text = selectedDay.ToUpper();
-                    StudyContentText.Text = dayContents[selectedDay];
+                    _ = AnimateAiResponseAsync(dayContents[selectedDay], true);
                 }
             }
         }
 
         private async void AskAiButton_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(ChatInputTextBox.Text))
-            {
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(ChatInputTextBox.Text)) return;
 
             if (DaysSidebarList.SelectedItem is ListBoxItem selectedItem)
             {
@@ -117,20 +110,21 @@ namespace project_docs_summariser
 
                     try
                     {
-                        string prompt = $"You are an AI tutor. " +
-                            $"Answer the student's question based strictly on this text:" +
-                            $"\n\n{text}\n\nStudent's question: {question}";
+                        string prompt = $"You are an expert, proactive AI professor teaching this material:\n\n{text}\n\n" +
+                            $"The student says: '{question}'.\n" +
+                            "INSTRUCTIONS:\n" +
+                            "1. DELIVER DEEP THEORY: Always provide a comprehensive, detailed, and long explanation. Write at least 2-3 paragraphs of solid theoretical knowledge before anything else. Do not be brief.\n" +
+                            "2. If the student asks a question, answer it thoroughly with examples.\n" +
+                            "3. If the student just agrees or says 'ready', take the lead! Introduce the next complex concept from the text and explain it in-depth.\n" +
+                            "4. Format crucial concepts using **keyword** and important sentences using __important fragment__.\n" +
+                            "5. QUESTIONS ARE SECONDARY: You can occasionally ask a thought-provoking question at the end, but ONLY after you have provided a massive chunk of theory. Never use a question as an excuse to keep your response short.";
 
-                        string aiResponse = await AiService.GetResponseAsync(prompt);
+                        string aiResponse = await AiService.GetResponseAsync(prompt); 
 
-                        StudyContentText.Text += $"\n\n---\nYour Question: {question}\n\nAI: {aiResponse}";
-
+                        StudyContentText.Inlines.Add(new Run($"\n\n---\nYour message: {question}") { Foreground = Brushes.White });
                         ChatInputTextBox.Clear();
 
-                        if (StudyContentText.Parent is ScrollViewer scroll)
-                        {
-                            scroll.ScrollToEnd();
-                        }
+                        await AnimateAiResponseAsync(aiResponse);
                     }
                     catch (Exception ex)
                     {
@@ -141,10 +135,6 @@ namespace project_docs_summariser
                         AskAiButton.IsEnabled = true;
                         AskAiButton.Content = "Ask AI";
                     }
-                }
-                else
-                {
-                    return;
                 }
             }
         }
@@ -159,15 +149,11 @@ namespace project_docs_summariser
                 {
                     string textToTest = dayContents[exactKey];
                     Hide();
-
                     QuizWindow quizWindow = new QuizWindow(textToTest);
                     quizWindow.ShowDialog();
                     Show();
+                    if (quizWindow.PassedQuiz) { UnlockNextDay(); }
 
-                    if (quizWindow.PassedQuiz)
-                    {
-                        UnlockNextDay();
-                    }
                 }
             }
         }
@@ -180,7 +166,7 @@ namespace project_docs_summariser
             {
                 ListBoxItem currentItem = (ListBoxItem)DaysSidebarList.Items[currentIndex];
                 string currentTitle = currentItem.Tag?.ToString() ?? "";
-                if (currentTitle != "Quiz")
+                if (currentTitle != "Summary")
                 {
                     currentItem.Content = $"✅ {currentTitle}";
                 }
@@ -191,7 +177,7 @@ namespace project_docs_summariser
                 ListBoxItem nextItem = (ListBoxItem)DaysSidebarList.Items[currentIndex + 1];
                 string nextTitle = nextItem.Tag?.ToString() ?? "";
 
-                if (nextTitle == "Quiz")
+                if (nextTitle == "Summary")
                 {
                     nextItem.IsEnabled = true;
                 }
@@ -203,6 +189,166 @@ namespace project_docs_summariser
                 }
             }
         }
+
+        private async Task AnimateAiResponseAsync(string response, bool isInitialLoad = false)
+        {
+            if (isInitialLoad)
+            {
+                StudyContentText.Inlines.Clear();
+            }
+            else
+            {
+                StudyContentText.Inlines.Add(new Run("\n\nAI: ") { FontWeight = FontWeights.Bold, Foreground = Brushes.DeepSkyBlue });
+            }
+
+            string[] parts = Regex.Split(response, @"(\*\*.*?\*\*|__.*?__)");
+
+            var softOrange = (SolidColorBrush)new BrushConverter().ConvertFrom("#DCA550");
+            var softCyan = (SolidColorBrush)new BrushConverter().ConvertFrom("#4EC9B0");
+
+            foreach (string part in parts)
+            {
+                if (string.IsNullOrEmpty(part)) continue;
+
+                Run run = new Run();
+                string textToPrint = "";
+
+                if (part.StartsWith("**") && part.EndsWith("**"))
+                {
+                    textToPrint = part.Substring(2, part.Length - 4);
+                    run.FontWeight = FontWeights.Bold;
+                    run.Foreground = softOrange;
+                }
+                else if (part.StartsWith("__") && part.EndsWith("__"))
+                {
+                    textToPrint = part.Substring(2, part.Length - 4);
+                    run.FontStyle = FontStyles.Italic;
+                    run.Foreground = softCyan;
+                }
+                else
+                {
+                    textToPrint = part;
+                    run.Foreground = Brushes.LightGray;
+                }
+
+                if (isInitialLoad)
+                {
+                    run.Text = textToPrint;
+                    StudyContentText.Inlines.Add(run);
+                }
+                else
+                {
+                    StudyContentText.Inlines.Add(run);
+                    foreach (char c in textToPrint)
+                    {
+                        run.Text += c;
+                        if (StudyContentText.Parent is ScrollViewer scroll) scroll.ScrollToEnd();
+                        await Task.Delay(10);
+                    }
+                }
+            }
+        }
+
+        private async void ToggleSidebar_Click(object sender, RoutedEventArgs e)
+        {
+            Button btn = sender as Button;
+            btn.IsEnabled = false;
+
+            double targetWidth = isSidebarExpanded ? 55 : 160;
+            double targetHeight = isSidebarExpanded ? 55 : MainContainerGrid.ActualHeight;
+
+            if (double.IsNaN(SidebarBorder.Height))
+            {
+                SidebarBorder.Height = MainContainerGrid.ActualHeight;
+            }
+
+            System.Windows.Media.Animation.DoubleAnimation widthAnim = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = targetWidth,
+                Duration = TimeSpan.FromSeconds(0.35),
+                EasingFunction = new System.Windows.Media.Animation.QuarticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+            };
+            System.Windows.Media.Animation.DoubleAnimation heightAnim = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = targetHeight,
+                Duration = TimeSpan.FromSeconds(0.35),
+                EasingFunction = new System.Windows.Media.Animation.QuarticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+            };
+            System.Windows.Media.Animation.DoubleAnimation textFade = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = isSidebarExpanded ? 0 : 1,
+                Duration = TimeSpan.FromSeconds(0.2)
+            };
+
+            SidebarBorder.BeginAnimation(WidthProperty, widthAnim);
+            SidebarBorder.BeginAnimation(HeightProperty, heightAnim);
+
+            TextBlock menuText = (TextBlock)btn.Template.FindName("MenuText", btn);
+            if (menuText != null) menuText.BeginAnimation(UIElement.OpacityProperty, textFade);
+
+            AnimateIconToX(btn, true);
+
+            await Task.Delay(400);
+
+            AnimateIconToX(btn, false);
+
+            isSidebarExpanded = !isSidebarExpanded;
+            btn.IsEnabled = true;
+        }
+
+        private void AnimateIconToX(Button btn, bool toX)
+        {
+            Rectangle topBar = (Rectangle)btn.Template.FindName("TopBar", btn);
+            Rectangle midBar = (Rectangle)btn.Template.FindName("MidBar", btn);
+            Rectangle bottomBar = (Rectangle)btn.Template.FindName("BottomBar", btn);
+
+            if (topBar == null || midBar == null || bottomBar == null) return;
+
+            if (topBar.RenderTransform.IsFrozen)
+                topBar.RenderTransform = topBar.RenderTransform.Clone();
+
+            if (bottomBar.RenderTransform.IsFrozen)
+                bottomBar.RenderTransform = bottomBar.RenderTransform.Clone();
+
+            double angle = toX ? 45 : 0;
+            double yTranslate = toX ? 6 : 0;
+            double opacity = toX ? 0 : 1;
+            TimeSpan duration = TimeSpan.FromSeconds(0.15);
+
+            TransformGroup topGroup = (TransformGroup)topBar.RenderTransform;
+            RotateTransform topRot = (RotateTransform)topGroup.Children[0];
+            TranslateTransform topTrans = (TranslateTransform)topGroup.Children[1];
+
+            TransformGroup botGroup = (TransformGroup)bottomBar.RenderTransform;
+            RotateTransform botRot = (RotateTransform)botGroup.Children[0];
+            TranslateTransform botTrans = (TranslateTransform)botGroup.Children[1];
+
+            topRot.BeginAnimation(RotateTransform.AngleProperty, new System.Windows.Media.Animation.DoubleAnimation(angle, duration));
+            topTrans.BeginAnimation(TranslateTransform.YProperty, new System.Windows.Media.Animation.DoubleAnimation(yTranslate, duration));
+
+            midBar.BeginAnimation(UIElement.OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(opacity, duration));
+
+            botRot.BeginAnimation(RotateTransform.AngleProperty, new System.Windows.Media.Animation.DoubleAnimation(-angle, duration));
+            botTrans.BeginAnimation(TranslateTransform.YProperty, new System.Windows.Media.Animation.DoubleAnimation(-yTranslate, duration));
+        }
+
+        private void ChatInputTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+                {
+                    return;
+                }
+                else
+                {
+                    e.Handled = true;
+                    if (AskAiButton.IsEnabled)
+                    {
+                        AskAiButton_Click(AskAiButton, new RoutedEventArgs());
+                    }
+                }
+            }
+        }
     }
 }
-

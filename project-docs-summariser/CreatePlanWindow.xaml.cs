@@ -81,12 +81,14 @@ namespace WpfAiIntegration
                 string hours = HoursTextBox.Text;
                 string notes = NotesTextBox.Text;
 
-                string prompt = $"You are an educational assistant. The user wants to study: {topic}. " +
-                                $"They have {days} days to prepare, dedicating {hours} hours per day. " +
-                                $"Their preferences/notes are: {notes}. " +
-                                $"Generate a detailed, day-by-day study schedule. Ensure consistency.\n\n" +
-                                $"CRITICAL INSTRUCTION: You MUST begin the section for each day exactly with the marker '|||DAY X|||' (where X is the day number). " +
-                                $"Do not add any introductory text before the first day marker! Your response must start with '|||DAY 1|||'.";
+                string prompt = $"You are an expert professor. Generate a detailed, day-by-day study schedule for: {topic}. " +
+                                $"Use {days} days, {hours} hours each. Notes: {notes}. " +
+                                "FORMATTING RULES for study content:\n" +
+                                "1. Highlight key terms and concepts like **this**.\n" +
+                                "2. Highlight very important sentences or core definitions like __this sentence is crucial__.\n" +
+                                "3. Provide rich, theoretical knowledge, not just bullet points.\n" +
+                                "CRITICAL INSTRUCTION: You MUST begin the section for each day exactly with the marker '|||DAY X|||' (where X is the day number). " +
+                                "Do not add any introductory text before the first day marker! Your response must start with '|||DAY 1|||'.";
 
                 if (SelectedFiles.Count > 0)
                 {
