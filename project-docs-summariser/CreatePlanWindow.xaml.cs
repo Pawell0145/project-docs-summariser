@@ -1,5 +1,6 @@
 ﻿using project_docs_summariser;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -9,7 +10,7 @@ namespace WpfAiIntegration
 {
     public partial class CreatePlanWindow : Window
     {
-        private string accumulatedSourceText = "";
+        private Dictionary<string, string> extractedDocuments = new Dictionary<string, string>();
 
         public CreatePlanWindow()
         {
@@ -39,12 +40,14 @@ namespace WpfAiIntegration
                 {
                     try
                     {
+                        string fileName = Path.GetFileName(filePath);
+                        if (extractedDocuments.ContainsKey(fileName)) continue;
+
                         string extractedText = DocumentExtractor.ExtractText(filePath);
 
                         if (!string.IsNullOrWhiteSpace(extractedText))
                         {
-                            string fileName = Path.GetFileName(filePath);
-                            accumulatedSourceText += $"\n\n--- SOURCE DOCUMENT: {fileName} ---\n{extractedText}";
+                            extractedDocuments[fileName] = extractedText;
                             FilesListBox.Items.Add(fileName);
                         }
                     }
@@ -56,6 +59,16 @@ namespace WpfAiIntegration
             }
         }
 
+        private void FilesListBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Delete && FilesListBox.SelectedItem != null)
+            {
+                string selectedFile = FilesListBox.SelectedItem.ToString();
+                extractedDocuments.Remove(selectedFile);
+                FilesListBox.Items.Remove(FilesListBox.SelectedItem);
+            }
+        }
+
         private async void CreatePlan_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(TopicTextBox.Text))
@@ -64,7 +77,8 @@ namespace WpfAiIntegration
                 return;
             }
 
-            IsEnabled = false;
+            LoadingOverlay.Visibility = Visibility.Visible;
+            MainContent.Opacity = 0.3;
 
             string subject = TopicTextBox.Text;
             string daysText = DaysTextBox.Text;
@@ -75,23 +89,30 @@ namespace WpfAiIntegration
             int hours = 0;
             int.TryParse(daysText, out days);
             int.TryParse(hoursText, out hours);
+            string finalSourceText = "";
+            foreach (var doc in extractedDocuments)
+            {
+                finalSourceText += $"\n\n--- SOURCE DOCUMENT: {doc.Key} ---\n{doc.Value}";
+            }
 
-            string fullPrompt = $@"Create a detailed study plan for the subject: {subject}.
-Total Timeframe: {days} days, studying {hours} hours per day.
-Additional Preferences/Notes: {notes}
+            string fullPrompt = $@"You are an elite academic planner.
+            Create a highly structured SYLLABUS/OUTLINE for the subject: {subject}.
+            Total Timeframe: {days} days, studying {hours} hours per day.
+            Additional Preferences/Notes: {notes}
 
-CRITICAL INSTRUCTION FOR PARSING: You MUST divide the study plan explicitly into exactly {days} distinct days. 
-You MUST start each day's section exactly with the special delimiter '|||DAY X|||' (for example: |||DAY 1|||, |||DAY 2|||, |||DAY 3|||). 
-Do NOT use standard headers like 'Day 1:'. Our automated parser strictly requires the '|||DAY X|||' marker at the beginning of each day's content.
+            CRITICAL INSTRUCTIONS:
+            1. Divide the syllabus exactly into {days} distinct days using the delimiter '|||DAY X|||'.
+            2. DO NOT write a massive wall of theory. Instead, provide a structured list of main topics and sub-topics for each day.
+            3. Include an engaging introduction for each day. Example: 'Today we have {hours} hours scheduled. We will cover X, Y, and Z.'
+            4. Provide a rich, detailed outline of the concepts to be studied, so the Interactive Tutor AI can use this outline to teach the student step-by-step later.
+            5. FORMATTING: You MUST format important terms using **keyword** and key summary goals using __important goal__.
 
-Base the study materials, topics, and summaries strictly on the following extracted source documents:
-{accumulatedSourceText}";
+            Base the outline strictly on these extracted documents:
+            {finalSourceText}";
 
             try
             {
                 GeneratedPlan = await AiService.GetResponseAsync(fullPrompt);
-
-                // Permanently save the newly generated plan locally to history
                 ProjectModel newProject = new ProjectModel
                 {
                     ProjectName = subject,
@@ -108,7 +129,9 @@ Base the study materials, topics, and summaries strictly on the following extrac
             catch (Exception ex)
             {
                 MessageBox.Show($"AI Generation failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                IsEnabled = true;
+
+                LoadingOverlay.Visibility = Visibility.Collapsed;
+                MainContent.Opacity = 1.0;
             }
         }
 

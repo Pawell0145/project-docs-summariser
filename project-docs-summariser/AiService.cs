@@ -11,9 +11,8 @@ namespace project_docs_summariser
         private const string ApiEndpoint = "https://api.groq.com/openai/v1/chat/completions";
         private static readonly HttpClient httpClient = new HttpClient();
 
-        public static async Task<string> GetResponseAsync(string message)
+            public static async Task<string> GetResponseAsync(string message)
         {
-            // Fully qualified path guarantees the compiler finds your newly generated setting
             string apiKey = project_docs_summariser.Properties.Settings.Default.ApiKey;
 
             if (string.IsNullOrWhiteSpace(apiKey))
