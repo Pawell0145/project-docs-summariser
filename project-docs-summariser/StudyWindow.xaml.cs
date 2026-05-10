@@ -17,9 +17,11 @@ namespace project_docs_summariser
     public partial class StudyWindow : Window
     {
         private Dictionary<string, string> dayContents = new Dictionary<string, string>();
+        private Dictionary<string, string> chatHistories = new Dictionary<string, string>();
         private bool isSidebarExpanded = true;
         private int totalDays;
         private int hoursPerDay;
+        private System.Threading.CancellationTokenSource _cancellationTokenSource;
 
         public StudyWindow()
         {
@@ -31,6 +33,7 @@ namespace project_docs_summariser
             totalDays = days;
             hoursPerDay = hours;
             dayContents.Clear();
+            chatHistories.Clear();
             DaysSidebarList.Items.Clear();
 
             int dayIndex = 0;
@@ -136,14 +139,16 @@ namespace project_docs_summariser
             {
                 string selectedDay = selectedItem.Tag.ToString();
 
+                _cancellationTokenSource?.Cancel();
+                _cancellationTokenSource = new System.Threading.CancellationTokenSource();
+
                 if (selectedDay == "Summary")
                 {
                     CurrentDayTitle.Text = "FINAL EXAM";
-
                     if (dayContents.ContainsKey("Summary"))
                     {
                         QuizButton.Content = "TRY AGAIN";
-                        _ = AnimateAiResponseAsync(dayContents["Summary"], true);
+                        _ = AnimateAiResponseAsync(dayContents["Summary"], true, _cancellationTokenSource.Token);
                     }
                     else
                     {
@@ -155,7 +160,13 @@ namespace project_docs_summariser
                 {
                     CurrentDayTitle.Text = selectedDay.ToUpper();
                     QuizButton.Content = "DAILY QUIZ";
-                    _ = AnimateAiResponseAsync(dayContents[selectedDay], true);
+                    string contentToLoad = dayContents[selectedDay];
+                    if (chatHistories.ContainsKey(selectedDay) && !string.IsNullOrWhiteSpace(chatHistories[selectedDay]))
+                    {
+                        contentToLoad += "\n\n--- HISTORIA ROZMOWY ---\n\n" + chatHistories[selectedDay];
+                    }
+
+                    _ = AnimateAiResponseAsync(contentToLoad, true, _cancellationTokenSource.Token);
                 }
             }
         }
@@ -175,25 +186,42 @@ namespace project_docs_summariser
 
                     AskAiButton.IsEnabled = false;
                     AskAiButton.Content = "Thinking...";
+                    var separatorBrush = (SolidColorBrush)new BrushConverter().ConvertFrom("#444444");
+                    var studentBrush = (SolidColorBrush)new BrushConverter().ConvertFrom("#B0B0B0");   
 
-                    StudyContentText.Inlines.Add(new Run($"\n\n---\nStudent: {question}\n") { FontWeight = FontWeights.Bold, Foreground = Brushes.White });
+                    StudyContentText.Inlines.Add(new Run("\n\n--------------------------------------------------\n") { Foreground = separatorBrush });
+
+                    StudyContentText.Inlines.Add(new Run($"Student: {question}\n") { FontWeight = FontWeights.Bold, Foreground = studentBrush });
                     if (StudyContentText.Parent is ScrollViewer sc) sc.ScrollToEnd();
+
                     ChatInputTextBox.Clear();
+
+                    if (!chatHistories.ContainsKey(exactKey))
+                    {
+                        chatHistories[exactKey] = "";
+                    }
+                    string history = chatHistories[exactKey];
 
                     try
                     {
-                        string prompt = $"You are an expert, proactive AI professor teaching this material:\n\n{text}\n\n" +
-                            $"The student says: '{question}'.\n" +
-                            "INSTRUCTIONS:\n" +
-                            "1. DELIVER DEEP THEORY: Always provide a comprehensive, detailed, and long explanation. Write at least 2-3 paragraphs of solid theoretical knowledge before anything else. Do not be brief.\n" +
-                            "2. If the student asks a question, answer it thoroughly with examples.\n" +
-                            "3. If the student just agrees or says 'ready', take the lead! Introduce the next complex concept from the text and explain it in-depth.\n" +
-                            "4. Format crucial concepts using **keyword** and important sentences using __important fragment__.\n" +
-                            "5. QUESTIONS ARE SECONDARY: You can occasionally ask a thought-provoking question at the end, but ONLY after you have provided a massive chunk of theory. Never use a question as an excuse to keep your response short.";
+                        string prompt = $@"You are an interactive, engaging AI professor.
+                            TODAY'S MATERIAL SYLLABUS: {text}
+                            CONVERSATION HISTORY: {history}
+                            STUDENT SAYS: '{question}'
+
+                            CRITICAL INSTRUCTIONS:
+                            1. DO NOT output a massive wall of text. It's boring. 
+                            2. Teach ONE or TWO core concepts at a time. Explain them deeply and engagingly, using examples.
+                            3. ALWAYS end your response by giving the student a choice. Ask them: 'Which of these topics would you like to explore next?' and provide 2-3 bulleted options based on the syllabus.
+                            4. MANDATORY FORMATTING: You MUST strictly format crucial keywords using **keyword** and the most important sentences using __important sentence__. Do not forget the underscores!
+                            5. Do not repeat topics the student has already learned or confirmed.";
 
                         string aiResponse = await AiService.GetResponseAsync(prompt);
+                        chatHistories[exactKey] += $"Student: {question}\nAI: {aiResponse}\n\n";
 
-                        await AnimateAiResponseAsync(aiResponse);
+                        _cancellationTokenSource?.Cancel();
+                        _cancellationTokenSource = new System.Threading.CancellationTokenSource();
+                        await AnimateAiResponseAsync(aiResponse, false, _cancellationTokenSource.Token);
                     }
                     catch (Exception ex)
                     {
@@ -301,7 +329,9 @@ namespace project_docs_summariser
                     {
                         dayContents["Summary"] = summaryWin.FinalGradingReport;
                         QuizButton.Content = "TRY AGAIN";
-                        await AnimateAiResponseAsync(summaryWin.FinalGradingReport, true);
+                        _cancellationTokenSource?.Cancel();
+                        _cancellationTokenSource = new System.Threading.CancellationTokenSource();
+                        await AnimateAiResponseAsync(summaryWin.FinalGradingReport, true, _cancellationTokenSource.Token);
                     }
                     else
                     {
@@ -357,7 +387,7 @@ namespace project_docs_summariser
             }
         }
 
-        private async Task AnimateAiResponseAsync(string response, bool isInitialLoad = false)
+        private async Task AnimateAiResponseAsync(string response, bool isInitialLoad, System.Threading.CancellationToken token)
         {
             if (isInitialLoad)
             {
@@ -365,7 +395,7 @@ namespace project_docs_summariser
             }
             else
             {
-                StudyContentText.Inlines.Add(new Run("\n\nAI: ") { FontWeight = FontWeights.Bold, Foreground = Brushes.DeepSkyBlue });
+                StudyContentText.Inlines.Add(new Run("\nAI: ") { FontWeight = FontWeights.Bold, Foreground = Brushes.DeepSkyBlue });
             }
 
             string[] parts = Regex.Split(response, @"(\*\*.*?\*\*|__.*?__)");
@@ -375,6 +405,8 @@ namespace project_docs_summariser
 
             foreach (string part in parts)
             {
+                if (token.IsCancellationRequested) break;
+
                 if (string.IsNullOrEmpty(part)) continue;
 
                 Run run = new Run();
@@ -408,9 +440,11 @@ namespace project_docs_summariser
                     StudyContentText.Inlines.Add(run);
                     foreach (char c in textToPrint)
                     {
+                        if (token.IsCancellationRequested) break;
+
                         run.Text += c;
                         if (StudyContentText.Parent is ScrollViewer scroll) scroll.ScrollToEnd();
-                        await Task.Delay(10);
+                        await Task.Delay(5);
                     }
                 }
             }

@@ -75,23 +75,24 @@ namespace WpfAiIntegration
             int hours = 0;
             int.TryParse(daysText, out days);
             int.TryParse(hoursText, out hours);
+            string fullPrompt = $@"You are an elite academic planner.
+                    Create a highly structured SYLLABUS/OUTLINE for the subject: {subject}.
+                    Total Timeframe: {days} days, studying {hours} hours per day.
+                    Additional Preferences/Notes: {notes}
 
-            string fullPrompt = $@"Create a detailed study plan for the subject: {subject}.
-Total Timeframe: {days} days, studying {hours} hours per day.
-Additional Preferences/Notes: {notes}
+                    CRITICAL INSTRUCTIONS:
+                    1. Divide the syllabus exactly into {days} distinct days using the delimiter '|||DAY X|||'.
+                    2. DO NOT write a massive wall of theory. Instead, provide a structured list of main topics and sub-topics for each day.
+                    3. Include an engaging introduction for each day. Example: 'Today we have {hours} hours scheduled. We will cover X, Y, and Z.'
+                    4. Provide a rich, detailed outline of the concepts to be studied, so the Interactive Tutor AI can use this outline to teach the student step-by-step later.
+                    5. FORMATTING: You MUST format important terms using **keyword** and key summary goals using __important goal__.
 
-CRITICAL INSTRUCTION FOR PARSING: You MUST divide the study plan explicitly into exactly {days} distinct days. 
-You MUST start each day's section exactly with the special delimiter '|||DAY X|||' (for example: |||DAY 1|||, |||DAY 2|||, |||DAY 3|||). 
-Do NOT use standard headers like 'Day 1:'. Our automated parser strictly requires the '|||DAY X|||' marker at the beginning of each day's content.
-
-Base the study materials, topics, and summaries strictly on the following extracted source documents:
-{accumulatedSourceText}";
+                    Base the outline strictly on these extracted documents:
+                    {accumulatedSourceText}";
 
             try
             {
                 GeneratedPlan = await AiService.GetResponseAsync(fullPrompt);
-
-                // Permanently save the newly generated plan locally to history
                 ProjectModel newProject = new ProjectModel
                 {
                     ProjectName = subject,

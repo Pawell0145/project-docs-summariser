@@ -4,6 +4,7 @@ using System.Text;
 using UglyToad.PdfPig;
 using DocumentFormat.OpenXml.Packaging;
 using A = DocumentFormat.OpenXml.Drawing;
+using PdfSharp.Pdf;
 
 namespace project_docs_summariser
 {
@@ -36,7 +37,7 @@ namespace project_docs_summariser
         private static string ReadPdf(string filePath)
         {
             StringBuilder sb = new StringBuilder();
-            using (PdfDocument document = PdfDocument.Open(filePath))
+            using (UglyToad.PdfPig.PdfDocument document = UglyToad.PdfPig.PdfDocument.Open(filePath))
             {
                 foreach (var page in document.GetPages())
                 {
