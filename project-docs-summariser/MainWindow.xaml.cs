@@ -1,137 +1,105 @@
-﻿using System;
+﻿using project_docs_summariser;
+using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
 using System.Windows;
-using Microsoft.Win32;
+using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace WpfAiIntegration
 {
     public partial class MainWindow : Window
     {
-        private const string ApiKey = "api_key";
-        private const string ApiEndpoint = "https://api.groq.com/openai/v1/chat/completions";
-        private static readonly HttpClient httpClient = new HttpClient();
-        private List<string> selectedFilePaths = new List<string>();
-
         public MainWindow()
         {
             InitializeComponent();
-        }
-
-        private void SelectFileButton_Click(object sender, RoutedEventArgs e)
-        {
-            OpenFileDialog openFileDialog = new OpenFileDialog
-            {
-                Filter = "Text Files (*.txt)|*.txt|All Files (*.*)|*.*",
-                Title = "Select text files",
-                Multiselect = true
-            };
-
-            if (openFileDialog.ShowDialog() == true)
-            {
-                selectedFilePaths.AddRange(openFileDialog.FileNames);
-                UpdateFileList();
-            }
-        }
-
-        private void ClearButton_Click(object sender, RoutedEventArgs e)
-        {
-            selectedFilePaths.Clear();
-            UpdateFileList();
-        }
-
-        private void UpdateFileList()
-        {
-            FileListBox.Items.Clear();
-            foreach (var filePath in selectedFilePaths)
-            {
-                FileListBox.Items.Add(Path.GetFileName(filePath));
-            }
-            FileCountTextBlock.Text = $"Selected files: {selectedFilePaths.Count}";
-        }
-
-        private async void SendButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (selectedFilePaths.Count == 0)
-            {
-                OutputTextBox.Text = "Please select at least one file.";
-                return;
-            }
-
-            SendButton.IsEnabled = false;
-            OutputTextBox.Text = "Processing...";
 
             try
             {
-                string combinedContent = CombineFileContents();
-                string aiResponse = await GetAiResponseAsync(combinedContent);
-                OutputTextBox.Text = aiResponse;
+                ApiKeyInput.Password = project_docs_summariser.Properties.Settings.Default.ApiKey;
             }
-            catch (Exception ex)
+            catch
             {
-                OutputTextBox.Text = $"Error: {ex.Message}";
-            }
-            finally
-            {
-                SendButton.IsEnabled = true;
+                // Ignored if settings aren't initialized yet
             }
         }
 
-        private string CombineFileContents()
+        private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            StringBuilder combinedContent = new StringBuilder();
-            for (int i = 0; i < selectedFilePaths.Count; i++)
-            {
-                string fileName = Path.GetFileName(selectedFilePaths[i]);
-                string fileContent = File.ReadAllText(selectedFilePaths[i]);
-                
-                combinedContent.AppendLine($"=== File: {fileName} ===");
-                combinedContent.AppendLine(fileContent);
-                
-                if (i < selectedFilePaths.Count - 1)
-                {
-                    combinedContent.AppendLine();
-                }
-            }
-            return combinedContent.ToString();
+            RefreshProjectList();
         }
 
-        private async Task<string> GetAiResponseAsync(string message)
+        private void RefreshProjectList()
         {
-            var requestBody = new
+            List<ProjectModel> history = ProjectManager.ListSavedProjects();
+            ProjectListBox.ItemsSource = history;
+        }
+
+        private void SaveKey_Click(object sender, RoutedEventArgs e)
+        {
+            project_docs_summariser.Properties.Settings.Default.ApiKey = ApiKeyInput.Password;
+            project_docs_summariser.Properties.Settings.Default.Save();
+
+            MessageBox.Show("API Key saved successfully!", "Settings Updated", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void OpenCreateDialog_Click(object sender, RoutedEventArgs e)
+        {
+            CreatePlanWindow createWindow = new CreatePlanWindow();
+            createWindow.Owner = this;
+
+            bool? result = createWindow.ShowDialog();
+
+            if (result == true)
             {
-                model = "llama-3.3-70b-versatile",
-                messages = new[]
+                RefreshProjectList();
+
+                if (ProjectListBox.Items.Count > 0)
                 {
-                    new { role = "user", content = message }
-                }
-            };
-
-            string jsonBody = JsonSerializer.Serialize(requestBody);
-            var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-
-            using (var requestMessage = new HttpRequestMessage(HttpMethod.Post, ApiEndpoint))
-            {
-                requestMessage.Headers.Add("Authorization", $"Bearer {ApiKey}");
-                requestMessage.Content = content;
-
-                var response = await httpClient.SendAsync(requestMessage);
-                response.EnsureSuccessStatusCode();
-
-                string responseBody = await response.Content.ReadAsStringAsync();
-
-                using (JsonDocument doc = JsonDocument.Parse(responseBody))
-                {
-                    JsonElement root = doc.RootElement;
-                    string textResult = root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
-                    return textResult;
+                    ProjectListBox.SelectedIndex = 0;
+                    LoadSelectedProject();
                 }
             }
+        }
+
+        private void OpenProject_Click(object sender, RoutedEventArgs e)
+        {
+            LoadSelectedProject();
+        }
+
+        private void ProjectListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            LoadSelectedProject();
+        }
+
+        private void LoadSelectedProject()
+        {
+            if (ProjectListBox.SelectedItem is ProjectModel selectedItem)
+            {
+                ProjectModel project = ProjectManager.LoadProject(selectedItem.FilePath);
+
+                if (project != null && !string.IsNullOrEmpty(project.RawPlan))
+                {
+                    StudyWindow studyWindow = new StudyWindow();
+                    studyWindow.LoadPlan(project.RawPlan, project.Days, project.Hours);
+                    studyWindow.Show();
+                }
+                else
+                {
+                    MessageBox.Show("Could not load the selected study plan. The file may be corrupted or missing.", "Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            else
+            {
+                MessageBox.Show("Please select a saved study plan from the left menu first.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        private void OpenSettings_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsWindow settingsWindow = new SettingsWindow();
+            settingsWindow.Owner = this;
+            settingsWindow.ShowDialog();
+
         }
     }
 }

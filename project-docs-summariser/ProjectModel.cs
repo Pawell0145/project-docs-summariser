@@ -1,0 +1,24 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
+
+namespace project_docs_summariser
+{
+    public class ProjectModel
+    {
+        public string ProjectName { get; set; }
+        public string RawPlan { get; set; }
+        public int Days { get; set; }
+        public int Hours { get; set; }
+        public DateTime CreatedAt { get; set; }
+
+        // --- NEW: Tracks which day indices are finished (e.g., 0, 1, 2) ---
+        public List<int> CompletedDays { get; set; } = new List<int>();
+
+        [JsonIgnore]
+        public string FilePath { get; set; }
+
+        [JsonIgnore]
+        public string DisplayTitle => $"{ProjectName} ({Days} Days)";
+    }
+}
