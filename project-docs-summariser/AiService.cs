@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -10,12 +8,19 @@ namespace project_docs_summariser
 {
     public static class AiService
     {
-        private const string ApiKey = "apikey";
         private const string ApiEndpoint = "https://api.groq.com/openai/v1/chat/completions";
         private static readonly HttpClient httpClient = new HttpClient();
 
         public static async Task<string> GetResponseAsync(string message)
         {
+            // Fully qualified path guarantees the compiler finds your newly generated setting
+            string apiKey = project_docs_summariser.Properties.Settings.Default.ApiKey;
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                throw new InvalidOperationException("API Key is missing. Please save your API key in the dashboard before continuing.");
+            }
+
             var requestBody = new
             {
                 model = "llama-3.3-70b-versatile",
@@ -30,7 +35,7 @@ namespace project_docs_summariser
 
             using (var requestMessage = new HttpRequestMessage(HttpMethod.Post, ApiEndpoint))
             {
-                requestMessage.Headers.Add("Authorization", $"Bearer {ApiKey}");
+                requestMessage.Headers.Add("Authorization", $"Bearer {apiKey}");
                 requestMessage.Content = content;
 
                 var response = await httpClient.SendAsync(requestMessage);

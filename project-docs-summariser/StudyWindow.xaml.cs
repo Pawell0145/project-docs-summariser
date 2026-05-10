@@ -20,7 +20,7 @@ namespace project_docs_summariser
         private bool isSidebarExpanded = true;
         private int totalDays;
         private int hoursPerDay;
-        
+
         public StudyWindow()
         {
             InitializeComponent();
@@ -34,6 +34,7 @@ namespace project_docs_summariser
             DaysSidebarList.Items.Clear();
 
             int dayIndex = 0;
+
             string[] parts = rawPlan.Split(new string[] { "|||DAY " }, StringSplitOptions.RemoveEmptyEntries);
 
             foreach (string part in parts)
@@ -66,6 +67,54 @@ namespace project_docs_summariser
                     DaysSidebarList.Items.Add(item);
                     dayIndex++;
                 }
+            }
+
+            if (dayContents.Count == 0)
+            {
+                var fallbackParts = Regex.Split(rawPlan, @"(?i)\bDAY\s+(\d+)[:\-]?");
+                for (int i = 1; i < fallbackParts.Length; i += 2)
+                {
+                    string dayNum = fallbackParts[i].Trim();
+                    string content = (i + 1 < fallbackParts.Length) ? fallbackParts[i + 1].Trim() : "";
+                    if (content.StartsWith(":") || content.StartsWith("-"))
+                    {
+                        content = content.Substring(1).Trim();
+                    }
+
+                    string dayTitle = $"Day #{dayNum}";
+                    dayContents[dayTitle] = content;
+
+                    ListBoxItem item = new ListBoxItem();
+                    item.Padding = new Thickness(15, 10, 15, 10);
+                    item.Tag = dayTitle;
+
+                    if (dayContents.Count == 1)
+                    {
+                        item.Content = $"☑️ {dayTitle}";
+                        item.IsEnabled = true;
+                    }
+                    else
+                    {
+                        item.Content = $"❌ {dayTitle}";
+                        item.IsEnabled = false;
+                        item.Foreground = Brushes.Gray;
+                    }
+
+                    DaysSidebarList.Items.Add(item);
+                }
+            }
+
+            if (dayContents.Count == 0)
+            {
+                string dayTitle = "Day #1";
+                dayContents[dayTitle] = rawPlan.Trim();
+
+                ListBoxItem item = new ListBoxItem();
+                item.Padding = new Thickness(15, 10, 15, 10);
+                item.Tag = dayTitle;
+                item.Content = $"☑️ {dayTitle}";
+                item.IsEnabled = true;
+                DaysSidebarList.Items.Add(item);
             }
 
             ListBoxItem quizItem = new ListBoxItem();
@@ -110,14 +159,14 @@ namespace project_docs_summariser
                 }
             }
         }
-        
+
         private async void AskAiButton_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(ChatInputTextBox.Text)) return;
 
             if (DaysSidebarList.SelectedItem is ListBoxItem selectedItem)
             {
-                string exactKey = selectedItem.Tag.ToString();
+                string exactKey = selectedItem.Tag?.ToString() ?? "";
 
                 if (dayContents.ContainsKey(exactKey))
                 {
@@ -126,6 +175,10 @@ namespace project_docs_summariser
 
                     AskAiButton.IsEnabled = false;
                     AskAiButton.Content = "Thinking...";
+
+                    StudyContentText.Inlines.Add(new Run($"\n\n---\nStudent: {question}\n") { FontWeight = FontWeights.Bold, Foreground = Brushes.White });
+                    if (StudyContentText.Parent is ScrollViewer sc) sc.ScrollToEnd();
+                    ChatInputTextBox.Clear();
 
                     try
                     {
@@ -138,10 +191,7 @@ namespace project_docs_summariser
                             "4. Format crucial concepts using **keyword** and important sentences using __important fragment__.\n" +
                             "5. QUESTIONS ARE SECONDARY: You can occasionally ask a thought-provoking question at the end, but ONLY after you have provided a massive chunk of theory. Never use a question as an excuse to keep your response short.";
 
-                        string aiResponse = await AiService.GetResponseAsync(prompt); 
-
-                        StudyContentText.Inlines.Add(new Run($"\n\n---\nYour message: {question}") { Foreground = Brushes.White });
-                        ChatInputTextBox.Clear();
+                        string aiResponse = await AiService.GetResponseAsync(prompt);
 
                         await AnimateAiResponseAsync(aiResponse);
                     }

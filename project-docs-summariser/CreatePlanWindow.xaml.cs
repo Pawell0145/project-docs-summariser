@@ -1,29 +1,22 @@
-﻿using Microsoft.Win32;
-using project_docs_summariser;
+﻿using project_docs_summariser;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 
 namespace WpfAiIntegration
 {
     public partial class CreatePlanWindow : Window
     {
-        public List<string> SelectedFiles { get; private set; } = new List<string>();
-
-        public string GeneratedPlan { get; private set; }
+        private string accumulatedSourceText = "";
 
         public CreatePlanWindow()
         {
             InitializeComponent();
         }
+
+        public string GeneratedPlan { get; private set; }
 
         private void NumberValidationTextBox(object sender, TextCompositionEventArgs e)
         {
@@ -33,105 +26,96 @@ namespace WpfAiIntegration
 
         private void SelectFiles_Click(object sender, RoutedEventArgs e)
         {
-            OpenFileDialog openFileDialog = new OpenFileDialog
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
             {
-                Filter = "Text Files (*.txt)|*.txt|All Files (*.*)|*.*",
-                Title = "Select study materials",
+                Title = "Select Source Documents",
+                Filter = "Supported Documents|*.pdf;*.docx;*.pptx|PDF Files|*.pdf|Word Documents (*.docx)|*.docx|Presentations (*.pptx)|*.pptx",
                 Multiselect = true
             };
 
             if (openFileDialog.ShowDialog() == true)
             {
-                foreach (var file in openFileDialog.FileNames)
+                foreach (string filePath in openFileDialog.FileNames)
                 {
-                    if (!SelectedFiles.Contains(file))
+                    try
                     {
-                        SelectedFiles.Add(file);
-                        FilesListBox.Items.Add(Path.GetFileName(file));
+                        string extractedText = DocumentExtractor.ExtractText(filePath);
+
+                        if (!string.IsNullOrWhiteSpace(extractedText))
+                        {
+                            string fileName = Path.GetFileName(filePath);
+                            accumulatedSourceText += $"\n\n--- SOURCE DOCUMENT: {fileName} ---\n{extractedText}";
+                            FilesListBox.Items.Add(fileName);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Failed to process {Path.GetFileName(filePath)}: {ex.Message}", "Extraction Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                 }
             }
         }
 
-        private void Cancel_Click(object sender, RoutedEventArgs e)
-        {
-            this.DialogResult = false;
-            this.Close();
-        }
-
         private async void CreatePlan_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(TopicTextBox.Text) ||
-                string.IsNullOrWhiteSpace(DaysTextBox.Text) ||
-                string.IsNullOrWhiteSpace(HoursTextBox.Text))
+            if (string.IsNullOrWhiteSpace(TopicTextBox.Text))
             {
-                MessageBox.Show("Please fill in Topic, Days, and Hours.", "Missing Data", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please enter a subject before creating a plan.", "Missing Input", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            Button createBtn = (Button)sender;
-            createBtn.IsEnabled = false;
-            createBtn.Content = "GENERATING...";
-            Mouse.OverrideCursor = Cursors.Wait;
+            IsEnabled = false;
+
+            string subject = TopicTextBox.Text;
+            string daysText = DaysTextBox.Text;
+            string hoursText = HoursTextBox.Text;
+            string notes = NotesTextBox.Text;
+
+            int days = 0;
+            int hours = 0;
+            int.TryParse(daysText, out days);
+            int.TryParse(hoursText, out hours);
+
+            string fullPrompt = $@"Create a detailed study plan for the subject: {subject}.
+Total Timeframe: {days} days, studying {hours} hours per day.
+Additional Preferences/Notes: {notes}
+
+CRITICAL INSTRUCTION FOR PARSING: You MUST divide the study plan explicitly into exactly {days} distinct days. 
+You MUST start each day's section exactly with the special delimiter '|||DAY X|||' (for example: |||DAY 1|||, |||DAY 2|||, |||DAY 3|||). 
+Do NOT use standard headers like 'Day 1:'. Our automated parser strictly requires the '|||DAY X|||' marker at the beginning of each day's content.
+
+Base the study materials, topics, and summaries strictly on the following extracted source documents:
+{accumulatedSourceText}";
 
             try
             {
-                string topic = TopicTextBox.Text;
-                string days = DaysTextBox.Text;
-                string hours = HoursTextBox.Text;
-                string notes = NotesTextBox.Text;
+                GeneratedPlan = await AiService.GetResponseAsync(fullPrompt);
 
-                string prompt = $"You are an expert professor. Generate a detailed, day-by-day study schedule for: {topic}. " +
-                                $"Use {days} days, {hours} hours each. Notes: {notes}. " +
-                                "FORMATTING RULES for study content:\n" +
-                                "1. Highlight key terms and concepts like **this**.\n" +
-                                "2. Highlight very important sentences or core definitions like __this sentence is crucial__.\n" +
-                                "3. Provide rich, theoretical knowledge, not just bullet points.\n" +
-                                "CRITICAL INSTRUCTION: You MUST begin the section for each day exactly with the marker '|||DAY X|||' (where X is the day number). " +
-                                "Do not add any introductory text before the first day marker! Your response must start with '|||DAY 1|||'.";
-
-                if (SelectedFiles.Count > 0)
+                // Permanently save the newly generated plan locally to history
+                ProjectModel newProject = new ProjectModel
                 {
-                    string combinedContent = CombineFileContents();
-                    prompt += $"\n\nBase your schedule STRICTLY on the following materials provided by the user:\n{combinedContent}";
-                }
-                else
-                {
-                    prompt += $"\n\nThe user did not provide any specific materials. Base the schedule on your general knowledge of the topic.";
-                }
+                    ProjectName = subject,
+                    RawPlan = GeneratedPlan,
+                    Days = days,
+                    Hours = hours,
+                    CreatedAt = DateTime.Now
+                };
+                ProjectManager.SaveProject(newProject);
 
-                GeneratedPlan = await AiService.GetResponseAsync(prompt);
-
-                this.DialogResult = true;
+                DialogResult = true;
+                Close();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"An error occurred:\n{ex.Message}", "API Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                GeneratedPlan = null;
-            }
-            finally
-            {
-                Mouse.OverrideCursor = null;
-                createBtn.IsEnabled = true;
-                createBtn.Content = "CREATE";
+                MessageBox.Show($"AI Generation failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                IsEnabled = true;
             }
         }
 
-        private string CombineFileContents()
+        private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            StringBuilder combinedContent = new StringBuilder();
-            for (int i = 0; i < SelectedFiles.Count; i++)
-            {
-                string fileName = Path.GetFileName(SelectedFiles[i]);
-                string fileContent = File.ReadAllText(SelectedFiles[i]); 
-
-                combinedContent.AppendLine($"=== File: {fileName} ===");
-                combinedContent.AppendLine(fileContent);
-                combinedContent.AppendLine();
-            }
-            return combinedContent.ToString();
+            DialogResult = false;
+            Close();
         }
-
-              
     }
 }

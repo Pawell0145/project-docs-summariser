@@ -3,69 +3,80 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AI-Academic-Sync" Height="600" Width="800"
         WindowStartupLocation="CenterScreen"
-        Background="#1E1E1E" Foreground="#E0E0E0" FontFamily="Segoe UI">
+        Background="#1E1E1E" Foreground="#E0E0E0" FontFamily="Segoe UI"
+        Loaded="Window_Loaded">
 
-    <Window.Resources>
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="#333337"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Padding" Value="15,8"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="5">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#007ACC"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
+	<Window.Resources>
+		<Style TargetType="Button">
+			<Setter Property="Background" Value="#333337"/>
+			<Setter Property="Foreground" Value="White"/>
+			<Setter Property="Padding" Value="15,8"/>
+			<Setter Property="BorderThickness" Value="0"/>
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate TargetType="Button">
+						<Border Background="{TemplateBinding Background}" CornerRadius="5">
+							<ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+						</Border>
+						<ControlTemplate.Triggers>
+							<Trigger Property="IsMouseOver" Value="True">
+								<Setter Property="Background" Value="#007ACC"/>
+							</Trigger>
+						</ControlTemplate.Triggers>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+		</Style>
+	</Window.Resources>
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="200"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+	<Grid>
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition Width="200"/>
+			<ColumnDefinition Width="*"/>
+		</Grid.ColumnDefinitions>
 
-        <Border Grid.Column="0" Background="#252526" BorderBrush="#333337" BorderThickness="0,0,2,0">
-            <StackPanel Margin="10">
-                <TextBlock Text="MENU" FontWeight="Bold" FontSize="18" Margin="0,10,0,20" Foreground="#007ACC" HorizontalAlignment="Center"/>
-                <TextBlock Text="Recent Projects:" Foreground="#AAAAAA" Margin="0,0,0,10"/>
+		<Border Grid.Column="0" Background="#252526" BorderBrush="#333337" BorderThickness="0,0,2,0">
+			<StackPanel Margin="10">
+				<TextBlock Text="MENU" FontWeight="Bold" FontSize="18" Margin="0,10,0,20" Foreground="#007ACC" HorizontalAlignment="Center"/>
+				<TextBlock Text="Saved Study Plans:" Foreground="#AAAAAA" Margin="0,0,0,10"/>
 
-                <ListBox x:Name="ProjectListBox" Height="450" Background="Transparent" BorderThickness="0" Foreground="White">
-                    <ListBoxItem Content="Math - Algebra" Padding="5,10"/>
-                    <ListBoxItem Content="History - WW2" Padding="5,10"/>
-                </ListBox>
-            </StackPanel>
-        </Border>
+				<ListBox x:Name="ProjectListBox" Height="450" Background="Transparent" BorderThickness="0" Foreground="White" DisplayMemberPath="DisplayTitle" MouseDoubleClick="ProjectListBox_MouseDoubleClick"/>
+			</StackPanel>
+		</Border>
 
-        <Grid Grid.Column="1" Margin="30">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+		<Grid Grid.Column="1" Margin="30">
+			<Grid.RowDefinitions>
+				<RowDefinition Height="Auto"/>
+				<RowDefinition Height="*"/>
+				<RowDefinition Height="Auto"/>
+			</Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Text="DASHBOARD" FontSize="28" FontWeight="Bold" Foreground="#007ACC" Margin="0,0,0,20"/>
+			<TextBlock Grid.Row="0" Text="DASHBOARD" FontSize="28" FontWeight="Bold" Foreground="#007ACC" Margin="0,0,0,20"/>
 
-            <Border Grid.Row="1" Background="#2D2D30" CornerRadius="8" Padding="20">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock Text="Welcome to AI-Academic-Sync!" FontSize="22" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                    <TextBlock Text="Create a new study plan or open an existing one from the left menu." FontSize="14" Foreground="#AAAAAA" TextWrapping="Wrap" TextAlignment="Center"/>
-                </StackPanel>
-            </Border>
+			<Border Grid.Row="1" Background="#2D2D30" CornerRadius="8" Padding="20">
+				<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+					<TextBlock Text="Welcome to AI-Academic-Sync!" FontSize="22" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+					<TextBlock Text="Create a new study plan or open an existing one from the left menu." FontSize="14" Foreground="#AAAAAA" TextWrapping="Wrap" TextAlignment="Center"/>
+				</StackPanel>
+			</Border>
 
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
-                <Button Content="OPEN" Width="120" Height="40" Margin="0,0,15,0" Background="#333337"/>
-                <Button Content="CREATE" Width="120" Height="40" Background="#28A745" FontWeight="Bold" Click="OpenCreateDialog_Click"/>
-            </StackPanel>
-        </Grid>
-    </Grid>
+			<Grid Grid.Row="2" Margin="0,20,0,0">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="*"/>
+				</Grid.ColumnDefinitions>
+
+				<StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+					<TextBlock Text="API Key:" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="0,0,10,0"/>
+					<PasswordBox x:Name="ApiKeyInput" Width="130" Height="35" Background="#333337" Foreground="White" BorderThickness="0" Padding="5" VerticalContentAlignment="Center"/>
+					<Button Content="SAVE" Height="35" Margin="10,0,0,0" Background="#007ACC" Click="SaveKey_Click"/>
+				</StackPanel>
+
+				<StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+					<Button Content="OPEN" Width="120" Height="40" Margin="0,0,15,0" Background="#333337" Click="OpenProject_Click"/>
+					<Button Content="CREATE" Width="120" Height="40" Background="#28A745" FontWeight="Bold" Click="OpenCreateDialog_Click"/>
+				</StackPanel>
+			</Grid>
+		</Grid>
+	</Grid>
 </Window>

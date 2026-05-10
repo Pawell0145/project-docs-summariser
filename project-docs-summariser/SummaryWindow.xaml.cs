@@ -13,6 +13,7 @@ namespace project_docs_summariser
     {
         private SummaryGeneration.SummaryExam currentExam;
         public string FinalGradingReport { get; private set; }
+
         public SummaryWindow(SummaryGeneration.SummaryExam exam)
         {
             InitializeComponent();
@@ -49,6 +50,7 @@ namespace project_docs_summariser
                     Margin = new Thickness(0, 0, 0, 15)
                 };
                 taskPanel.Children.Add(instructionText);
+
                 if (task.Type == SummaryGeneration.TaskType.MultipleChoice)
                 {
                     StackPanel optionsPanel = new StackPanel { Margin = new Thickness(10, 0, 0, 0) };
