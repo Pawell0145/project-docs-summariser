@@ -52,8 +52,9 @@
 			</Grid.RowDefinitions>
 
 			<TextBlock Grid.Row="0" Text="DASHBOARD" FontSize="28" FontWeight="Bold" Foreground="#007ACC" Margin="0,0,0,20"/>
+            <Button Grid.Row="0" Content="SETTINGS" Width="100" Height="30" HorizontalAlignment="Right" Background="#333337" Click="OpenSettings_Click" Margin="0,0,0,20"/>
 
-			<Border Grid.Row="1" Background="#2D2D30" CornerRadius="8" Padding="20">
+            <Border Grid.Row="1" Background="#2D2D30" CornerRadius="8" Padding="20">
 				<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
 					<TextBlock Text="Welcome to AI-Academic-Sync!" FontSize="22" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,10"/>
 					<TextBlock Text="Create a new study plan or open an existing one from the left menu." FontSize="14" Foreground="#AAAAAA" TextWrapping="Wrap" TextAlignment="Center"/>
