@@ -93,5 +93,13 @@ namespace WpfAiIntegration
                 MessageBox.Show("Please select a saved study plan from the left menu first.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
+
+        private void OpenSettings_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsWindow settingsWindow = new SettingsWindow();
+            settingsWindow.Owner = this;
+            settingsWindow.ShowDialog();
+
+        }
     }
 }

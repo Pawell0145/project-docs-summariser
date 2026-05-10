@@ -34,5 +34,17 @@ namespace project_docs_summariser.Properties {
                 this["ApiKey"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool DisableAnimations {
+            get {
+                return ((bool)(this["DisableAnimations"]));
+            }
+            set {
+                this["DisableAnimations"] = value;
+            }
+        }
     }
 }

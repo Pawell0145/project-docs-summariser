@@ -402,11 +402,11 @@ namespace project_docs_summariser
 
             var softOrange = (SolidColorBrush)new BrushConverter().ConvertFrom("#DCA550");
             var softCyan = (SolidColorBrush)new BrushConverter().ConvertFrom("#4EC9B0");
+            bool disableAnimations = AreAnimationsDisabled;
 
             foreach (string part in parts)
             {
                 if (token.IsCancellationRequested) break;
-
                 if (string.IsNullOrEmpty(part)) continue;
 
                 Run run = new Run();
@@ -430,22 +430,27 @@ namespace project_docs_summariser
                     run.Foreground = Brushes.LightGray;
                 }
 
-                if (isInitialLoad)
+                if (isInitialLoad || disableAnimations)
                 {
                     run.Text = textToPrint;
                     StudyContentText.Inlines.Add(run);
-                }
-                else
-                {
-                    StudyContentText.Inlines.Add(run);
-                    foreach (char c in textToPrint)
-                    {
-                        if (token.IsCancellationRequested) break;
 
-                        run.Text += c;
-                        if (StudyContentText.Parent is ScrollViewer scroll) scroll.ScrollToEnd();
-                        await Task.Delay(5);
+                    if (!isInitialLoad && StudyContentText.Parent is ScrollViewer scroll)
+                    {
+                        scroll.ScrollToEnd();
                     }
+
+                    continue;
+                }
+
+                StudyContentText.Inlines.Add(run);
+                foreach (char c in textToPrint)
+                {
+                    if (token.IsCancellationRequested) break;
+
+                    run.Text += c;
+                    if (StudyContentText.Parent is ScrollViewer scroll) scroll.ScrollToEnd();
+                    await Task.Delay(5);
                 }
             }
         }
@@ -461,6 +466,25 @@ namespace project_docs_summariser
             if (double.IsNaN(SidebarBorder.Height))
             {
                 SidebarBorder.Height = MainContainerGrid.ActualHeight;
+            }
+
+            TextBlock menuText = (TextBlock)btn.Template.FindName("MenuText", btn);
+
+            if (AreAnimationsDisabled)
+            {
+                SidebarBorder.Width = targetWidth;
+                SidebarBorder.Height = targetHeight;
+
+                if (menuText != null)
+                {
+                    menuText.Opacity = isSidebarExpanded ? 0 : 1;
+                }
+
+                AnimateIconToX(btn, false);
+
+                isSidebarExpanded = !isSidebarExpanded;
+                btn.IsEnabled = true;
+                return;
             }
 
             System.Windows.Media.Animation.DoubleAnimation widthAnim = new System.Windows.Media.Animation.DoubleAnimation
@@ -484,7 +508,6 @@ namespace project_docs_summariser
             SidebarBorder.BeginAnimation(WidthProperty, widthAnim);
             SidebarBorder.BeginAnimation(HeightProperty, heightAnim);
 
-            TextBlock menuText = (TextBlock)btn.Template.FindName("MenuText", btn);
             if (menuText != null) menuText.BeginAnimation(UIElement.OpacityProperty, textFade);
 
             AnimateIconToX(btn, true);
@@ -524,6 +547,17 @@ namespace project_docs_summariser
             RotateTransform botRot = (RotateTransform)botGroup.Children[0];
             TranslateTransform botTrans = (TranslateTransform)botGroup.Children[1];
 
+            if (AreAnimationsDisabled)
+            {
+                topRot.Angle = angle;
+                topTrans.Y = yTranslate;
+                midBar.Opacity = opacity;
+
+                botRot.Angle = -angle;
+                botTrans.Y = -yTranslate;
+                return;
+            }
+
             topRot.BeginAnimation(RotateTransform.AngleProperty, new System.Windows.Media.Animation.DoubleAnimation(angle, duration));
             topTrans.BeginAnimation(TranslateTransform.YProperty, new System.Windows.Media.Animation.DoubleAnimation(yTranslate, duration));
 
@@ -550,6 +584,11 @@ namespace project_docs_summariser
                     }
                 }
             }
+        }
+
+        private bool AreAnimationsDisabled
+        {
+            get { return Properties.Settings.Default.DisableAnimations; }
         }
     }
 }
