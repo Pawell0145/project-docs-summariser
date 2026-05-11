@@ -41,7 +41,6 @@ namespace project_docs_summariser
             }
         }
 
-        // --- NEW: Updates the raw plan text on disk to permanently save chat history and summaries ---
         public static void UpdateProjectPlan(string filePath, string newRawPlan)
         {
             var project = LoadProject(filePath);
@@ -85,6 +84,14 @@ namespace project_docs_summariser
                 return JsonSerializer.Deserialize<ProjectModel>(jsonString);
             }
             return null;
+        }
+
+        public static void DeleteProject(string filePath)
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
         }
     }
 }

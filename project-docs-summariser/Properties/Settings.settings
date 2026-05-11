@@ -8,5 +8,17 @@
     <Setting Name="DisableAnimations" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
+    <Setting Name="AnimationSpeed" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">5</Value>
+    </Setting>
+    <Setting Name="KeywordColor" Type="System.String" Scope="User">
+      <Value Profile="(Default)">#DCA550</Value>
+    </Setting>
+    <Setting Name="SentenceColor" Type="System.String" Scope="User">
+      <Value Profile="(Default)">#4EC9B0</Value>
+    </Setting>
+    <Setting Name="AppLanguage" Type="System.String" Scope="User">
+      <Value Profile="(Default)">English</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using project_docs_summariser;
+using System;
 using System.Collections.Generic;
 using System.Net.NetworkInformation;
 using System.Text.RegularExpressions;
@@ -9,7 +10,6 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using static System.Net.Mime.MediaTypeNames;
 using System.Text.Json;
 
 namespace project_docs_summariser
@@ -20,9 +20,10 @@ namespace project_docs_summariser
         private bool isSidebarExpanded = true;
         private int totalDays;
         private int hoursPerDay;
-
         private string currentProjectPath;
         private List<int> finishedDayIndices = new List<int>();
+        private System.Threading.CancellationTokenSource _cancellationTokenSource;
+        private string studentPreferences = "";
 
         public StudyWindow()
         {
@@ -35,6 +36,7 @@ namespace project_docs_summariser
             hoursPerDay = project.Hours;
             currentProjectPath = project.FilePath;
             finishedDayIndices = project.CompletedDays ?? new List<int>();
+            studentPreferences = project.UserNotes ?? "";
 
             dayContents.Clear();
             DaysSidebarList.Items.Clear();
@@ -50,7 +52,6 @@ namespace project_docs_summariser
                     string dayNumber = part.Substring(0, markerIndex).Trim();
                     string content = part.Substring(markerIndex + 3).Trim();
 
-                    // --- Restore persistently saved Summary Report ---
                     if (dayNumber == "Summary")
                     {
                         dayContents["Summary"] = content;
@@ -89,7 +90,6 @@ namespace project_docs_summariser
             ListBoxItem quizItem = new ListBoxItem();
             quizItem.Tag = "Summary";
 
-            // Safely count actual study days so loaded summary reports don't throw off completion checks
             int actualStudyDaysCount = 0;
             foreach (var key in dayContents.Keys)
             {
@@ -116,7 +116,6 @@ namespace project_docs_summariser
             }
         }
 
-        // --- NEW: Reconstructs the full plan with all chats and saves directly to disk ---
         private void SaveCurrentPlanToDisk()
         {
             if (string.IsNullOrEmpty(currentProjectPath)) return;
@@ -146,6 +145,8 @@ namespace project_docs_summariser
             if (DaysSidebarList.SelectedItem is ListBoxItem selectedItem)
             {
                 string selectedDay = selectedItem.Tag.ToString();
+                _cancellationTokenSource?.Cancel();
+                _cancellationTokenSource = new System.Threading.CancellationTokenSource();
 
                 if (selectedDay == "Summary")
                 {
@@ -154,7 +155,7 @@ namespace project_docs_summariser
                     if (dayContents.ContainsKey("Summary"))
                     {
                         QuizButton.Content = "TRY AGAIN";
-                        _ = AnimateAiResponseAsync(dayContents["Summary"], true);
+                        _ = AnimateAiResponseAsync(dayContents["Summary"], true, _cancellationTokenSource.Token);
                     }
                     else
                     {
@@ -166,13 +167,21 @@ namespace project_docs_summariser
                 {
                     CurrentDayTitle.Text = selectedDay.ToUpper();
                     QuizButton.Content = "DAILY QUIZ";
-                    _ = AnimateAiResponseAsync(dayContents[selectedDay], true);
+                    _ = AnimateAiResponseAsync(dayContents[selectedDay], true, _cancellationTokenSource.Token);
                 }
             }
         }
 
         private async void AskAiButton_Click(object sender, RoutedEventArgs e)
         {
+            if (AskAiButton.Content.ToString() == "Stop")
+            {
+                _cancellationTokenSource?.Cancel();
+                AskAiButton.Content = "Ask AI";
+                StudyContentText.Inlines.Add(new Run("\n[AI stopped by user]") { Foreground = Brushes.Gray, FontStyle = FontStyles.Italic });
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(ChatInputTextBox.Text)) return;
 
             if (DaysSidebarList.SelectedItem is ListBoxItem selectedItem)
@@ -184,39 +193,96 @@ namespace project_docs_summariser
                     string text = dayContents[exactKey];
                     string question = ChatInputTextBox.Text;
 
-                    AskAiButton.IsEnabled = false;
-                    AskAiButton.Content = "Thinking...";
+                    AskAiButton.Content = "Stop";
+
+                    var separatorBrush = (SolidColorBrush)new BrushConverter().ConvertFrom("#444444");
+                    var studentBrush = (SolidColorBrush)new BrushConverter().ConvertFrom("#B0B0B0");
+
+                    StudyContentText.Inlines.Add(new Run("\n\n--------------------------------------------------\n") { Foreground = separatorBrush });
+                    StudyContentText.Inlines.Add(new Run($"Student: {question}\n") { FontWeight = FontWeights.Bold, Foreground = studentBrush });
+                    if (StudyContentText.Parent is ScrollViewer sc) sc.ScrollToEnd();
+                    ChatInputTextBox.Clear();
 
                     try
                     {
-                        string prompt = $"You are an expert, proactive AI professor teaching this material:\n\n{text}\n\n" +
-                            $"The student says: '{question}'.\n" +
-                            "INSTRUCTIONS:\n" +
-                            "1. DELIVER DEEP THEORY: Always provide a comprehensive, detailed, and long explanation. Write at least 2-3 paragraphs of solid theoretical knowledge before anything else. Do not be brief.\n" +
-                            "2. If the student asks a question, answer it thoroughly with examples.\n" +
-                            "3. If the student just agrees or says 'ready', take the lead! Introduce the next complex concept from the text and explain it in-depth.\n" +
-                            "4. Format crucial concepts using **keyword** and important sentences using __important fragment__.\n" +
-                            "5. QUESTIONS ARE SECONDARY: You can occasionally ask a thought-provoking question at the end, but ONLY after you have provided a massive chunk of theory. Never use a question as an excuse to keep your response short.";
+                        string prompt = "";
+                        string appLang = Properties.Settings.Default.AppLanguage;
+                        if (string.IsNullOrEmpty(appLang)) appLang = "English";
+
+                        if (exactKey == "Summary")
+                        {
+                            prompt = $@"You are a supportive academic advisor reviewing the student's Final Exam results.
+                                EXAM GRADING REPORT AND CHAT HISTORY: {text}
+                                STUDENT SAYS: '{question}'
+
+                                CRITICAL INSTRUCTIONS:
+                                1. LANGUAGE: Respond strictly in {appLang.ToUpper()}.
+                                2. You are NOT teaching a new lesson. You are here to review the exam.
+                                3. If the student asks why they made a mistake, explain the correct answer clearly.
+                                4. Give them encouragement and specific study tips based on their performance.
+                                5. DO NOT ask 'Which of these topics would you like to explore next?'. Just answer their doubts about the exam.
+                                6. FORMATTING: Use **keyword** and __important sentence__.";
+                        }
+                        else
+                        {
+                            string instructions = "";
+
+                            if (!string.IsNullOrWhiteSpace(studentPreferences))
+                            {
+                                instructions = $@"
+                                    1. LANGUAGE: Respond strictly in {appLang.ToUpper()}.
+                                    2. STRICT TEACHING STYLE: You MUST adapt your behavior EXACTLY to these user preferences: '{studentPreferences}'.
+                                    3. ADAPTATION: If the user wants LONG theory, provide massive, highly detailed paragraphs. Do NOT be concise.
+                                    4. NO CHOICES: If the user explicitly states they don't like choices or RPG style, DO NOT ask them what to do next. Just automatically transition to the next topic in the syllabus and teach it.
+                                    5. MANDATORY FORMATTING: You MUST strictly format crucial keywords using **keyword** and the most important sentences using __important sentence__.
+                                    6. Do not repeat topics the student has already learned.";
+                            }
+                            else
+                            {
+                                instructions = $@"
+                                    1. LANGUAGE: Respond strictly in {appLang.ToUpper()}.
+                                    2. DO NOT output a massive wall of text. It's boring. 
+                                    3. Teach ONE or TWO core concepts at a time. Explain them deeply and engagingly, using examples.
+                                    4. ALWAYS end your response by giving the student a choice. Ask them: 'Which of these topics would you like to explore next?' and provide 2-3 bulleted options based on the syllabus.
+                                    5. MANDATORY FORMATTING: You MUST strictly format crucial keywords using **keyword** and the most important sentences using __important sentence__.
+                                    6. Do not repeat topics the student has already learned.";
+                            }
+
+                                prompt = $@"You are an expert AI professor.
+                                        LANGUAGE: Respond strictly in {appLang.ToUpper()}.
+                                        TODAY'S MATERIAL AND CHAT HISTORY: {text}
+                                        STUDENT SAYS: '{question}'
+
+                                        CRITICAL INSTRUCTIONS:
+                                        {instructions}";
+                        }
 
                         string aiResponse = await AiService.GetResponseAsync(prompt);
 
-                        StudyContentText.Inlines.Add(new Run($"\n\n---\nYour message: {question}") { Foreground = Brushes.White });
-                        ChatInputTextBox.Clear();
+                        _cancellationTokenSource?.Cancel();
+                        _cancellationTokenSource = new System.Threading.CancellationTokenSource();
 
-                        await AnimateAiResponseAsync(aiResponse);
+                        await AnimateAiResponseAsync(aiResponse, false, _cancellationTokenSource.Token);
 
-                        // --- PERSIST HISTORY: Instantly append chat to memory and save directly to JSON! ---
-                        dayContents[exactKey] += $"\n\n---\nYour message: {question}\n\nAI:\n{aiResponse}";
-                        SaveCurrentPlanToDisk();
+                        if (!_cancellationTokenSource.IsCancellationRequested)
+                        {
+                            dayContents[exactKey] += $"\n\n--------------------------------------------------\nStudent: {question}\n\nAI:\n{aiResponse}";
+                            SaveCurrentPlanToDisk();
+                        }
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show($"No connection with Ai: {ex.Message}");
+                        if (_cancellationTokenSource == null || !_cancellationTokenSource.IsCancellationRequested)
+                        {
+                            MessageBox.Show($"No connection with Ai: {ex.Message}");
+                        }
                     }
                     finally
                     {
-                        AskAiButton.IsEnabled = true;
-                        AskAiButton.Content = "Ask AI";
+                        if (AskAiButton.Content.ToString() == "Stop")
+                        {
+                            AskAiButton.Content = "Ask AI";
+                        }
                     }
                 }
             }
@@ -258,38 +324,41 @@ namespace project_docs_summariser
             try
             {
                 int taskCount = Math.Min(15, Math.Max(5, (totalDays * hoursPerDay)));
-
                 string allDaysText = string.Join("\n\n", dayContents.Values);
+
+                string appLang = Properties.Settings.Default.AppLanguage;
+                if (string.IsNullOrEmpty(appLang)) appLang = "English";
+
                 string prompt = $@"You are an elite University Examiner. 
-                            CONTEXT: This is a final exam for a course that lasted {totalDays} days, {hoursPerDay} hours per day.
+                CONTEXT: This is a final exam for a course that lasted {totalDays} days, {hoursPerDay} hours per day.
 
-                            STUDY MATERIAL:
-                            {allDaysText}
+                STUDY MATERIAL:
+                {allDaysText}
 
-                            INSTRUCTIONS:
-                            1. Generate EXACTLY {taskCount} tasks.
-                            2. Analyze the material and pick ONLY 2-3 most relevant TaskTypes from the list: [MultipleChoice, ShortAnswer, Essay, Calculation, CaseStudy, FillInTheBlanks, CodeSnippet].
-                               - CRITICAL: If the subject is Humanistic, DO NOT use Calculation or CodeSnippet. 
-                               - If the subject is Technical, prioritize Calculation/Code/ShortAnswer.
-                            3. You MUST return ONLY a valid JSON object. Do not include any extraneous text.
+                INSTRUCTIONS:
+                1. LANGUAGE: Generate all questions, instructions, and options strictly in {appLang.ToUpper()}.
+                2. Generate EXACTLY {taskCount} tasks.
+                3. Analyze the material and pick ONLY 2-3 most relevant TaskTypes from the list: [MultipleChoice, ShortAnswer, Essay, Calculation, CaseStudy, FillInTheBlanks, CodeSnippet].
+                   - CRITICAL: If the subject is Humanistic, DO NOT use Calculation or CodeSnippet. 
+                   - If the subject is Technical, prioritize Calculation/Code/ShortAnswer.
+                4. You MUST return ONLY a valid JSON object. Do not include any extraneous text.
 
-                            JSON SCHEMA EXAMPLES (Use exact TaskType values: MultipleChoice, ShortAnswer, Essay, Calculation, CaseStudy, FillInTheBlanks, CodeSnippet):
-
-                            {{
-                              ""DetectedSubject"": ""Computer Science - Algorithms"",
-                              ""Tasks"": [
-                                {{
-                                  ""Type"": ""MultipleChoice"",
-                                  ""Instruction"": ""Which sorting algorithm has O(n log n) worst-case time complexity?"",
-                                  ""Options"": [""Merge Sort"", ""Quick Sort"", ""Bubble Sort""]
-                                }},
-                                {{
-                                  ""Type"": ""ShortAnswer"",
-                                  ""Instruction"": ""Define polymorphism in one sentence."",
-                                  ""Options"": []
-                                }}
-                              ]
-                            }}";
+                JSON SCHEMA EXAMPLES:
+                {{
+                  ""DetectedSubject"": ""Computer Science - Algorithms"",
+                  ""Tasks"": [
+                    {{
+                      ""Type"": ""MultipleChoice"",
+                      ""Instruction"": ""Which sorting algorithm has O(n log n) worst-case time complexity?"",
+                      ""Options"": [""Merge Sort"", ""Quick Sort"", ""Bubble Sort""]
+                    }},
+                    {{
+                      ""Type"": ""ShortAnswer"",
+                      ""Instruction"": ""Define polymorphism in one sentence."",
+                      ""Options"": []
+                    }}
+                  ]
+                }}";
 
                 string aiResponse = await AiService.GetResponseAsync(prompt);
                 int startIndex = aiResponse.IndexOf('{');
@@ -306,20 +375,20 @@ namespace project_docs_summariser
                 if (exam != null && exam.Tasks.Count > 0)
                 {
                     this.Hide();
-
                     SummaryWindow summaryWin = new SummaryWindow(exam);
                     summaryWin.ShowDialog();
-
                     this.Show();
+
                     if (!string.IsNullOrEmpty(summaryWin.FinalGradingReport))
                     {
                         dayContents["Summary"] = summaryWin.FinalGradingReport;
                         QuizButton.Content = "TRY AGAIN";
 
-                        // --- PERSIST EXAM: Instantly save the final exam grading report to your JSON file! ---
                         SaveCurrentPlanToDisk();
 
-                        await AnimateAiResponseAsync(summaryWin.FinalGradingReport, true);
+                        _cancellationTokenSource?.Cancel();
+                        _cancellationTokenSource = new System.Threading.CancellationTokenSource();
+                        await AnimateAiResponseAsync(summaryWin.FinalGradingReport, true, _cancellationTokenSource.Token);
                     }
                     else
                     {
@@ -384,7 +453,7 @@ namespace project_docs_summariser
             }
         }
 
-        private async Task AnimateAiResponseAsync(string response, bool isInitialLoad = false)
+        private async Task AnimateAiResponseAsync(string response, bool isInitialLoad, System.Threading.CancellationToken token)
         {
             if (isInitialLoad)
             {
@@ -392,16 +461,24 @@ namespace project_docs_summariser
             }
             else
             {
-                StudyContentText.Inlines.Add(new Run("\n\nAI: ") { FontWeight = FontWeights.Bold, Foreground = Brushes.DeepSkyBlue });
+                StudyContentText.Inlines.Add(new Run("\nAI: ") { FontWeight = FontWeights.Bold, Foreground = Brushes.DeepSkyBlue });
             }
 
+            bool disableTypingAnimation = Properties.Settings.Default.DisableAnimations;
             string[] parts = Regex.Split(response, @"(\*\*.*?\*\*|__.*?__)");
+            string keywordHex = Properties.Settings.Default.KeywordColor;
+            string sentenceHex = Properties.Settings.Default.SentenceColor;
 
-            var softOrange = (SolidColorBrush)new BrushConverter().ConvertFrom("#DCA550");
-            var softCyan = (SolidColorBrush)new BrushConverter().ConvertFrom("#4EC9B0");
+            if (string.IsNullOrEmpty(keywordHex)) keywordHex = "#DCA550";
+            if (string.IsNullOrEmpty(sentenceHex)) sentenceHex = "#4EC9B0";
+
+            var keywordBrush = (SolidColorBrush)new BrushConverter().ConvertFrom(keywordHex);
+            var sentenceBrush = (SolidColorBrush)new BrushConverter().ConvertFrom(sentenceHex);
 
             foreach (string part in parts)
             {
+                if (token.IsCancellationRequested) break;
+
                 if (string.IsNullOrEmpty(part)) continue;
 
                 Run run = new Run();
@@ -411,13 +488,13 @@ namespace project_docs_summariser
                 {
                     textToPrint = part.Substring(2, part.Length - 4);
                     run.FontWeight = FontWeights.Bold;
-                    run.Foreground = softOrange;
+                    run.Foreground = keywordBrush;
                 }
                 else if (part.StartsWith("__") && part.EndsWith("__"))
                 {
                     textToPrint = part.Substring(2, part.Length - 4);
                     run.FontStyle = FontStyles.Italic;
-                    run.Foreground = softCyan;
+                    run.Foreground = sentenceBrush;
                 }
                 else
                 {
@@ -425,19 +502,26 @@ namespace project_docs_summariser
                     run.Foreground = Brushes.LightGray;
                 }
 
-                if (isInitialLoad)
+                if (isInitialLoad || disableTypingAnimation)
                 {
                     run.Text = textToPrint;
                     StudyContentText.Inlines.Add(run);
+                    if (StudyContentText.Parent is ScrollViewer scroll) scroll.ScrollToEnd();
                 }
                 else
                 {
+                    int typeSpeed = Properties.Settings.Default.AnimationSpeed;
+                    if (typeSpeed <= 0) typeSpeed = 5;
+
                     StudyContentText.Inlines.Add(run);
                     foreach (char c in textToPrint)
                     {
+                        if (token.IsCancellationRequested) break;
+
                         run.Text += c;
                         if (StudyContentText.Parent is ScrollViewer scroll) scroll.ScrollToEnd();
-                        await Task.Delay(10);
+
+                        await Task.Delay(typeSpeed);
                     }
                 }
             }

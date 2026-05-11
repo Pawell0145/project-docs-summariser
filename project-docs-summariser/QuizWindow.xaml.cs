@@ -123,34 +123,32 @@ namespace project_docs_summariser
             QuizProgressBar.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, anim);
         }
 
-        private void NextQuestionBtn_Click(object sender, RoutedEventArgs e)
+        private async void NextQuestionBtn_Click(object sender, RoutedEventArgs e)
         {
             if (isReviewMode && NextQuestionBtn.Content.ToString() == "CLOSE")
             {
+                System.Windows.Media.Animation.DoubleAnimation reviewAnim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    To = questions.Count,
+                    Duration = TimeSpan.FromSeconds(0.4),
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
+                QuizProgressBar.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, reviewAnim);
+
+                NextQuestionBtn.IsEnabled = false;
+                await Task.Delay(500);
+
                 isReviewMode = false;
                 QuizStartGrid.Visibility = Visibility.Collapsed;
                 QuizResultGrid.Visibility = Visibility.Visible;
                 return;
             }
-
             int selectedIndex = -1;
 
-            if (OptionA.IsChecked == true)
-            {
-                selectedIndex = 0;
-            }
-            else if (OptionB.IsChecked == true)
-            {
-                selectedIndex = 1;
-            }
-            else if (OptionC.IsChecked == true)
-            {
-                selectedIndex = 2;
-            }
-            else if (OptionD.IsChecked == true) 
-            {
-                selectedIndex = 3;
-            }
+            if (OptionA.IsChecked == true) selectedIndex = 0;
+            else if (OptionB.IsChecked == true) selectedIndex = 1;
+            else if (OptionC.IsChecked == true) selectedIndex = 2;
+            else if (OptionD.IsChecked == true) selectedIndex = 3;
 
             if (!isReviewMode)
             {
@@ -166,29 +164,30 @@ namespace project_docs_summariser
                     score++;
                 }
             }
-
             currentQuestionIndex++;
+
             if (currentQuestionIndex < questions.Count)
             {
                 LoadCurrentQues();
             }
             else if (!isReviewMode)
             {
+                System.Windows.Media.Animation.DoubleAnimation finalAnim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    To = questions.Count,
+                    Duration = TimeSpan.FromSeconds(0.4),
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
+                QuizProgressBar.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, finalAnim);
+                NextQuestionBtn.IsEnabled = false;
+                await Task.Delay(500);
                 ShowResults();
             }
         }
-
         private void ShowResults()
         {
             QuizStartGrid.Visibility = Visibility.Collapsed;
             QuizResultGrid.Visibility = Visibility.Visible;
-
-            System.Windows.Media.Animation.DoubleAnimation finalAnim = new System.Windows.Media.Animation.DoubleAnimation
-            {
-                To = questions.Count,
-                Duration = TimeSpan.FromSeconds(0.4)
-            };
-            QuizProgressBar.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, finalAnim);
 
             double percentage = ((double)score / questions.Count) * 100;
             ResultScore.Text = $"{score} / {questions.Count}";
@@ -208,7 +207,6 @@ namespace project_docs_summariser
                 TryAgainBtn.Visibility = Visibility.Visible;
             }
         }
-
         private void FinishQuiz(object sender, RoutedEventArgs e)
         {
             Close();

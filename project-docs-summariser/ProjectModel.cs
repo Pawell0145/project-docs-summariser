@@ -11,8 +11,7 @@ namespace project_docs_summariser
         public int Days { get; set; }
         public int Hours { get; set; }
         public DateTime CreatedAt { get; set; }
-
-        // --- NEW: Tracks which day indices are finished (e.g., 0, 1, 2) ---
+        public string UserNotes { get; set; }
         public List<int> CompletedDays { get; set; } = new List<int>();
 
         [JsonIgnore]

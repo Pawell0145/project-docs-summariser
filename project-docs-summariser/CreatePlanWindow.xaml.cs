@@ -95,20 +95,23 @@ namespace WpfAiIntegration
                 finalSourceText += $"\n\n--- SOURCE DOCUMENT: {doc.Key} ---\n{doc.Value}";
             }
 
+            string appLang = project_docs_summariser.Properties.Settings.Default.AppLanguage;
+            if (string.IsNullOrEmpty(appLang)) appLang = "English";
+
             string fullPrompt = $@"You are an elite academic planner.
-            Create a highly structured SYLLABUS/OUTLINE for the subject: {subject}.
-            Total Timeframe: {days} days, studying {hours} hours per day.
-            Additional Preferences/Notes: {notes}
+                    Create a highly structured SYLLABUS/OUTLINE for the subject: {subject}.
+                    Total Timeframe: {days} days, studying {hours} hours per day.
+                    Additional Preferences/Notes: {notes}
 
-            CRITICAL INSTRUCTIONS:
-            1. Divide the syllabus exactly into {days} distinct days using the delimiter '|||DAY X|||'.
-            2. DO NOT write a massive wall of theory. Instead, provide a structured list of main topics and sub-topics for each day.
-            3. Include an engaging introduction for each day. Example: 'Today we have {hours} hours scheduled. We will cover X, Y, and Z.'
-            4. Provide a rich, detailed outline of the concepts to be studied, so the Interactive Tutor AI can use this outline to teach the student step-by-step later.
-            5. FORMATTING: You MUST format important terms using **keyword** and key summary goals using __important goal__.
+                    CRITICAL INSTRUCTIONS:
+                    1. LANGUAGE: You MUST generate the ENTIRE syllabus strictly in the following language: {appLang.ToUpper()}.
+                    2. Divide the syllabus exactly into {days} distinct days using the delimiter '|||DAY X|||'.
+                    3. DO NOT write a massive wall of theory. Provide a structured list of main topics and sub-topics for each day.
+                    4. Include an engaging introduction for each day.
+                    5. FORMATTING: You MUST format important terms using **keyword** and key summary goals using __important goal__.
 
-            Base the outline strictly on these extracted documents:
-            {finalSourceText}";
+                    Base the outline strictly on these extracted documents:
+                    {finalSourceText}";
 
             try
             {
@@ -119,6 +122,7 @@ namespace WpfAiIntegration
                     RawPlan = GeneratedPlan,
                     Days = days,
                     Hours = hours,
+                    UserNotes = notes,
                     CreatedAt = DateTime.Now
                 };
                 ProjectManager.SaveProject(newProject);
