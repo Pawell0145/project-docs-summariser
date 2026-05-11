@@ -17,28 +17,30 @@ namespace project_docs_summariser
     public partial class StudyWindow : Window
     {
         private Dictionary<string, string> dayContents = new Dictionary<string, string>();
-        private Dictionary<string, string> chatHistories = new Dictionary<string, string>();
         private bool isSidebarExpanded = true;
         private int totalDays;
         private int hoursPerDay;
-        private System.Threading.CancellationTokenSource _cancellationTokenSource;
+
+        private string currentProjectPath;
+        private List<int> finishedDayIndices = new List<int>();
 
         public StudyWindow()
         {
             InitializeComponent();
         }
 
-        public void LoadPlan(string rawPlan, int days, int hours)
+        public void LoadPlan(ProjectModel project)
         {
-            totalDays = days;
-            hoursPerDay = hours;
+            totalDays = project.Days;
+            hoursPerDay = project.Hours;
+            currentProjectPath = project.FilePath;
+            finishedDayIndices = project.CompletedDays ?? new List<int>();
+
             dayContents.Clear();
-            chatHistories.Clear();
             DaysSidebarList.Items.Clear();
 
             int dayIndex = 0;
-
-            string[] parts = rawPlan.Split(new string[] { "|||DAY " }, StringSplitOptions.RemoveEmptyEntries);
+            string[] parts = project.RawPlan.Split(new string[] { "|||DAY " }, StringSplitOptions.RemoveEmptyEntries);
 
             foreach (string part in parts)
             {
@@ -48,6 +50,13 @@ namespace project_docs_summariser
                     string dayNumber = part.Substring(0, markerIndex).Trim();
                     string content = part.Substring(markerIndex + 3).Trim();
 
+                    // --- Restore persistently saved Summary Report ---
+                    if (dayNumber == "Summary")
+                    {
+                        dayContents["Summary"] = content;
+                        continue;
+                    }
+
                     string dayTitle = $"Day #{dayNumber}";
                     dayContents[dayTitle] = content;
 
@@ -55,7 +64,12 @@ namespace project_docs_summariser
                     item.Padding = new Thickness(15, 10, 15, 10);
                     item.Tag = dayTitle;
 
-                    if (dayIndex == 0)
+                    if (finishedDayIndices.Contains(dayIndex))
+                    {
+                        item.Content = $"✅ {dayTitle}";
+                        item.IsEnabled = true;
+                    }
+                    else if (dayIndex == 0 || (finishedDayIndices.Count > 0 && dayIndex == finishedDayIndices[finishedDayIndices.Count - 1] + 1))
                     {
                         item.Content = $"☑️ {dayTitle}";
                         item.IsEnabled = true;
@@ -72,59 +86,28 @@ namespace project_docs_summariser
                 }
             }
 
-            if (dayContents.Count == 0)
-            {
-                var fallbackParts = Regex.Split(rawPlan, @"(?i)\bDAY\s+(\d+)[:\-]?");
-                for (int i = 1; i < fallbackParts.Length; i += 2)
-                {
-                    string dayNum = fallbackParts[i].Trim();
-                    string content = (i + 1 < fallbackParts.Length) ? fallbackParts[i + 1].Trim() : "";
-                    if (content.StartsWith(":") || content.StartsWith("-"))
-                    {
-                        content = content.Substring(1).Trim();
-                    }
-
-                    string dayTitle = $"Day #{dayNum}";
-                    dayContents[dayTitle] = content;
-
-                    ListBoxItem item = new ListBoxItem();
-                    item.Padding = new Thickness(15, 10, 15, 10);
-                    item.Tag = dayTitle;
-
-                    if (dayContents.Count == 1)
-                    {
-                        item.Content = $"☑️ {dayTitle}";
-                        item.IsEnabled = true;
-                    }
-                    else
-                    {
-                        item.Content = $"❌ {dayTitle}";
-                        item.IsEnabled = false;
-                        item.Foreground = Brushes.Gray;
-                    }
-
-                    DaysSidebarList.Items.Add(item);
-                }
-            }
-
-            if (dayContents.Count == 0)
-            {
-                string dayTitle = "Day #1";
-                dayContents[dayTitle] = rawPlan.Trim();
-
-                ListBoxItem item = new ListBoxItem();
-                item.Padding = new Thickness(15, 10, 15, 10);
-                item.Tag = dayTitle;
-                item.Content = $"☑️ {dayTitle}";
-                item.IsEnabled = true;
-                DaysSidebarList.Items.Add(item);
-            }
-
             ListBoxItem quizItem = new ListBoxItem();
-            quizItem.Content = "🔒 Summary";
-            quizItem.Foreground = Brushes.Gray;
-            quizItem.IsEnabled = false;
             quizItem.Tag = "Summary";
+
+            // Safely count actual study days so loaded summary reports don't throw off completion checks
+            int actualStudyDaysCount = 0;
+            foreach (var key in dayContents.Keys)
+            {
+                if (key.StartsWith("Day #")) actualStudyDaysCount++;
+            }
+
+            if (finishedDayIndices.Count >= actualStudyDaysCount && actualStudyDaysCount > 0)
+            {
+                quizItem.Content = "🎓 Summary";
+                quizItem.Foreground = Brushes.DeepSkyBlue;
+                quizItem.IsEnabled = true;
+            }
+            else
+            {
+                quizItem.Content = "🔒 Summary";
+                quizItem.Foreground = Brushes.Gray;
+                quizItem.IsEnabled = false;
+            }
             DaysSidebarList.Items.Add(quizItem);
 
             if (DaysSidebarList.Items.Count > 0)
@@ -133,22 +116,45 @@ namespace project_docs_summariser
             }
         }
 
+        // --- NEW: Reconstructs the full plan with all chats and saves directly to disk ---
+        private void SaveCurrentPlanToDisk()
+        {
+            if (string.IsNullOrEmpty(currentProjectPath)) return;
+
+            string updatedRawPlan = "";
+            foreach (var kvp in dayContents)
+            {
+                string key = kvp.Key;
+                string content = kvp.Value;
+
+                if (key.StartsWith("Day #"))
+                {
+                    string dayNum = key.Substring(5).Trim();
+                    updatedRawPlan += $"|||DAY {dayNum}|||\n{content}\n\n";
+                }
+                else if (key == "Summary")
+                {
+                    updatedRawPlan += $"|||DAY Summary|||\n{content}\n\n";
+                }
+            }
+
+            ProjectManager.UpdateProjectPlan(currentProjectPath, updatedRawPlan);
+        }
+
         private void DaysSidebarList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (DaysSidebarList.SelectedItem is ListBoxItem selectedItem)
             {
                 string selectedDay = selectedItem.Tag.ToString();
 
-                _cancellationTokenSource?.Cancel();
-                _cancellationTokenSource = new System.Threading.CancellationTokenSource();
-
                 if (selectedDay == "Summary")
                 {
                     CurrentDayTitle.Text = "FINAL EXAM";
+
                     if (dayContents.ContainsKey("Summary"))
                     {
                         QuizButton.Content = "TRY AGAIN";
-                        _ = AnimateAiResponseAsync(dayContents["Summary"], true, _cancellationTokenSource.Token);
+                        _ = AnimateAiResponseAsync(dayContents["Summary"], true);
                     }
                     else
                     {
@@ -160,13 +166,7 @@ namespace project_docs_summariser
                 {
                     CurrentDayTitle.Text = selectedDay.ToUpper();
                     QuizButton.Content = "DAILY QUIZ";
-                    string contentToLoad = dayContents[selectedDay];
-                    if (chatHistories.ContainsKey(selectedDay) && !string.IsNullOrWhiteSpace(chatHistories[selectedDay]))
-                    {
-                        contentToLoad += "\n\n--- HISTORIA ROZMOWY ---\n\n" + chatHistories[selectedDay];
-                    }
-
-                    _ = AnimateAiResponseAsync(contentToLoad, true, _cancellationTokenSource.Token);
+                    _ = AnimateAiResponseAsync(dayContents[selectedDay], true);
                 }
             }
         }
@@ -177,7 +177,7 @@ namespace project_docs_summariser
 
             if (DaysSidebarList.SelectedItem is ListBoxItem selectedItem)
             {
-                string exactKey = selectedItem.Tag?.ToString() ?? "";
+                string exactKey = selectedItem.Tag.ToString();
 
                 if (dayContents.ContainsKey(exactKey))
                 {
@@ -186,42 +186,28 @@ namespace project_docs_summariser
 
                     AskAiButton.IsEnabled = false;
                     AskAiButton.Content = "Thinking...";
-                    var separatorBrush = (SolidColorBrush)new BrushConverter().ConvertFrom("#444444");
-                    var studentBrush = (SolidColorBrush)new BrushConverter().ConvertFrom("#B0B0B0");   
-
-                    StudyContentText.Inlines.Add(new Run("\n\n--------------------------------------------------\n") { Foreground = separatorBrush });
-
-                    StudyContentText.Inlines.Add(new Run($"Student: {question}\n") { FontWeight = FontWeights.Bold, Foreground = studentBrush });
-                    if (StudyContentText.Parent is ScrollViewer sc) sc.ScrollToEnd();
-
-                    ChatInputTextBox.Clear();
-
-                    if (!chatHistories.ContainsKey(exactKey))
-                    {
-                        chatHistories[exactKey] = "";
-                    }
-                    string history = chatHistories[exactKey];
 
                     try
                     {
-                        string prompt = $@"You are an interactive, engaging AI professor.
-                            TODAY'S MATERIAL SYLLABUS: {text}
-                            CONVERSATION HISTORY: {history}
-                            STUDENT SAYS: '{question}'
-
-                            CRITICAL INSTRUCTIONS:
-                            1. DO NOT output a massive wall of text. It's boring. 
-                            2. Teach ONE or TWO core concepts at a time. Explain them deeply and engagingly, using examples.
-                            3. ALWAYS end your response by giving the student a choice. Ask them: 'Which of these topics would you like to explore next?' and provide 2-3 bulleted options based on the syllabus.
-                            4. MANDATORY FORMATTING: You MUST strictly format crucial keywords using **keyword** and the most important sentences using __important sentence__. Do not forget the underscores!
-                            5. Do not repeat topics the student has already learned or confirmed.";
+                        string prompt = $"You are an expert, proactive AI professor teaching this material:\n\n{text}\n\n" +
+                            $"The student says: '{question}'.\n" +
+                            "INSTRUCTIONS:\n" +
+                            "1. DELIVER DEEP THEORY: Always provide a comprehensive, detailed, and long explanation. Write at least 2-3 paragraphs of solid theoretical knowledge before anything else. Do not be brief.\n" +
+                            "2. If the student asks a question, answer it thoroughly with examples.\n" +
+                            "3. If the student just agrees or says 'ready', take the lead! Introduce the next complex concept from the text and explain it in-depth.\n" +
+                            "4. Format crucial concepts using **keyword** and important sentences using __important fragment__.\n" +
+                            "5. QUESTIONS ARE SECONDARY: You can occasionally ask a thought-provoking question at the end, but ONLY after you have provided a massive chunk of theory. Never use a question as an excuse to keep your response short.";
 
                         string aiResponse = await AiService.GetResponseAsync(prompt);
-                        chatHistories[exactKey] += $"Student: {question}\nAI: {aiResponse}\n\n";
 
-                        _cancellationTokenSource?.Cancel();
-                        _cancellationTokenSource = new System.Threading.CancellationTokenSource();
-                        await AnimateAiResponseAsync(aiResponse, false, _cancellationTokenSource.Token);
+                        StudyContentText.Inlines.Add(new Run($"\n\n---\nYour message: {question}") { Foreground = Brushes.White });
+                        ChatInputTextBox.Clear();
+
+                        await AnimateAiResponseAsync(aiResponse);
+
+                        // --- PERSIST HISTORY: Instantly append chat to memory and save directly to JSON! ---
+                        dayContents[exactKey] += $"\n\n---\nYour message: {question}\n\nAI:\n{aiResponse}";
+                        SaveCurrentPlanToDisk();
                     }
                     catch (Exception ex)
                     {
@@ -329,9 +315,11 @@ namespace project_docs_summariser
                     {
                         dayContents["Summary"] = summaryWin.FinalGradingReport;
                         QuizButton.Content = "TRY AGAIN";
-                        _cancellationTokenSource?.Cancel();
-                        _cancellationTokenSource = new System.Threading.CancellationTokenSource();
-                        await AnimateAiResponseAsync(summaryWin.FinalGradingReport, true, _cancellationTokenSource.Token);
+
+                        // --- PERSIST EXAM: Instantly save the final exam grading report to your JSON file! ---
+                        SaveCurrentPlanToDisk();
+
+                        await AnimateAiResponseAsync(summaryWin.FinalGradingReport, true);
                     }
                     else
                     {
@@ -356,15 +344,24 @@ namespace project_docs_summariser
         private void UnlockNextDay()
         {
             int currentIndex = DaysSidebarList.SelectedIndex;
+            if (currentIndex < 0) return;
 
-            if (currentIndex >= 0)
+            if (!finishedDayIndices.Contains(currentIndex))
             {
-                ListBoxItem currentItem = (ListBoxItem)DaysSidebarList.Items[currentIndex];
-                string currentTitle = currentItem.Tag?.ToString() ?? "";
-                if (currentTitle != "Summary")
+                finishedDayIndices.Add(currentIndex);
+                finishedDayIndices.Sort();
+
+                if (!string.IsNullOrEmpty(currentProjectPath))
                 {
-                    currentItem.Content = $"✅ {currentTitle}";
+                    ProjectManager.UpdateProjectProgress(currentProjectPath, finishedDayIndices);
                 }
+            }
+
+            ListBoxItem currentItem = (ListBoxItem)DaysSidebarList.Items[currentIndex];
+            string currentTitle = currentItem.Tag?.ToString() ?? "";
+            if (currentTitle != "Summary")
+            {
+                currentItem.Content = $"✅ {currentTitle}";
             }
 
             if (currentIndex + 1 < DaysSidebarList.Items.Count)
@@ -387,7 +384,7 @@ namespace project_docs_summariser
             }
         }
 
-        private async Task AnimateAiResponseAsync(string response, bool isInitialLoad, System.Threading.CancellationToken token)
+        private async Task AnimateAiResponseAsync(string response, bool isInitialLoad = false)
         {
             if (isInitialLoad)
             {
@@ -395,18 +392,16 @@ namespace project_docs_summariser
             }
             else
             {
-                StudyContentText.Inlines.Add(new Run("\nAI: ") { FontWeight = FontWeights.Bold, Foreground = Brushes.DeepSkyBlue });
+                StudyContentText.Inlines.Add(new Run("\n\nAI: ") { FontWeight = FontWeights.Bold, Foreground = Brushes.DeepSkyBlue });
             }
 
             string[] parts = Regex.Split(response, @"(\*\*.*?\*\*|__.*?__)");
 
             var softOrange = (SolidColorBrush)new BrushConverter().ConvertFrom("#DCA550");
             var softCyan = (SolidColorBrush)new BrushConverter().ConvertFrom("#4EC9B0");
-            bool disableAnimations = AreAnimationsDisabled;
 
             foreach (string part in parts)
             {
-                if (token.IsCancellationRequested) break;
                 if (string.IsNullOrEmpty(part)) continue;
 
                 Run run = new Run();
@@ -430,27 +425,20 @@ namespace project_docs_summariser
                     run.Foreground = Brushes.LightGray;
                 }
 
-                if (isInitialLoad || disableAnimations)
+                if (isInitialLoad)
                 {
                     run.Text = textToPrint;
                     StudyContentText.Inlines.Add(run);
-
-                    if (!isInitialLoad && StudyContentText.Parent is ScrollViewer scroll)
-                    {
-                        scroll.ScrollToEnd();
-                    }
-
-                    continue;
                 }
-
-                StudyContentText.Inlines.Add(run);
-                foreach (char c in textToPrint)
+                else
                 {
-                    if (token.IsCancellationRequested) break;
-
-                    run.Text += c;
-                    if (StudyContentText.Parent is ScrollViewer scroll) scroll.ScrollToEnd();
-                    await Task.Delay(5);
+                    StudyContentText.Inlines.Add(run);
+                    foreach (char c in textToPrint)
+                    {
+                        run.Text += c;
+                        if (StudyContentText.Parent is ScrollViewer scroll) scroll.ScrollToEnd();
+                        await Task.Delay(10);
+                    }
                 }
             }
         }
@@ -466,25 +454,6 @@ namespace project_docs_summariser
             if (double.IsNaN(SidebarBorder.Height))
             {
                 SidebarBorder.Height = MainContainerGrid.ActualHeight;
-            }
-
-            TextBlock menuText = (TextBlock)btn.Template.FindName("MenuText", btn);
-
-            if (AreAnimationsDisabled)
-            {
-                SidebarBorder.Width = targetWidth;
-                SidebarBorder.Height = targetHeight;
-
-                if (menuText != null)
-                {
-                    menuText.Opacity = isSidebarExpanded ? 0 : 1;
-                }
-
-                AnimateIconToX(btn, false);
-
-                isSidebarExpanded = !isSidebarExpanded;
-                btn.IsEnabled = true;
-                return;
             }
 
             System.Windows.Media.Animation.DoubleAnimation widthAnim = new System.Windows.Media.Animation.DoubleAnimation
@@ -508,6 +477,7 @@ namespace project_docs_summariser
             SidebarBorder.BeginAnimation(WidthProperty, widthAnim);
             SidebarBorder.BeginAnimation(HeightProperty, heightAnim);
 
+            TextBlock menuText = (TextBlock)btn.Template.FindName("MenuText", btn);
             if (menuText != null) menuText.BeginAnimation(UIElement.OpacityProperty, textFade);
 
             AnimateIconToX(btn, true);
@@ -547,17 +517,6 @@ namespace project_docs_summariser
             RotateTransform botRot = (RotateTransform)botGroup.Children[0];
             TranslateTransform botTrans = (TranslateTransform)botGroup.Children[1];
 
-            if (AreAnimationsDisabled)
-            {
-                topRot.Angle = angle;
-                topTrans.Y = yTranslate;
-                midBar.Opacity = opacity;
-
-                botRot.Angle = -angle;
-                botTrans.Y = -yTranslate;
-                return;
-            }
-
             topRot.BeginAnimation(RotateTransform.AngleProperty, new System.Windows.Media.Animation.DoubleAnimation(angle, duration));
             topTrans.BeginAnimation(TranslateTransform.YProperty, new System.Windows.Media.Animation.DoubleAnimation(yTranslate, duration));
 
@@ -584,11 +543,6 @@ namespace project_docs_summariser
                     }
                 }
             }
-        }
-
-        private bool AreAnimationsDisabled
-        {
-            get { return Properties.Settings.Default.DisableAnimations; }
         }
     }
 }

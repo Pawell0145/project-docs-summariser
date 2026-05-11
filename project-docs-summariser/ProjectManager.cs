@@ -20,7 +20,6 @@ namespace project_docs_summariser
 
             string safeName = string.Join("_", project.ProjectName.Split(Path.GetInvalidFileNameChars()));
 
-            // If it's a new project, create a new timestamped name; otherwise, keep the existing path
             if (string.IsNullOrEmpty(project.FilePath))
             {
                 string fileName = $"{safeName}_{DateTime.Now:yyyyMMdd_HHmmss}.json";
@@ -31,13 +30,24 @@ namespace project_docs_summariser
             File.WriteAllText(project.FilePath, jsonString);
         }
 
-        // NEW: Specific method to update an existing file's progress
         public static void UpdateProjectProgress(string filePath, List<int> completedDays)
         {
             var project = LoadProject(filePath);
             if (project != null)
             {
                 project.CompletedDays = completedDays;
+                project.FilePath = filePath;
+                SaveProject(project);
+            }
+        }
+
+        // --- NEW: Updates the raw plan text on disk to permanently save chat history and summaries ---
+        public static void UpdateProjectPlan(string filePath, string newRawPlan)
+        {
+            var project = LoadProject(filePath);
+            if (project != null)
+            {
+                project.RawPlan = newRawPlan;
                 project.FilePath = filePath;
                 SaveProject(project);
             }

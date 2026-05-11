@@ -12,15 +12,6 @@ namespace WpfAiIntegration
         public MainWindow()
         {
             InitializeComponent();
-
-            try
-            {
-                ApiKeyInput.Password = project_docs_summariser.Properties.Settings.Default.ApiKey;
-            }
-            catch
-            {
-                // Ignored if settings aren't initialized yet
-            }
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -32,14 +23,6 @@ namespace WpfAiIntegration
         {
             List<ProjectModel> history = ProjectManager.ListSavedProjects();
             ProjectListBox.ItemsSource = history;
-        }
-
-        private void SaveKey_Click(object sender, RoutedEventArgs e)
-        {
-            project_docs_summariser.Properties.Settings.Default.ApiKey = ApiKeyInput.Password;
-            project_docs_summariser.Properties.Settings.Default.Save();
-
-            MessageBox.Show("API Key saved successfully!", "Settings Updated", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void OpenCreateDialog_Click(object sender, RoutedEventArgs e)
@@ -79,8 +62,10 @@ namespace WpfAiIntegration
 
                 if (project != null && !string.IsNullOrEmpty(project.RawPlan))
                 {
+                    project.FilePath = selectedItem.FilePath;
+
                     StudyWindow studyWindow = new StudyWindow();
-                    studyWindow.LoadPlan(project.RawPlan, project.Days, project.Hours);
+                    studyWindow.LoadPlan(project);
                     studyWindow.Show();
                 }
                 else
@@ -99,7 +84,6 @@ namespace WpfAiIntegration
             SettingsWindow settingsWindow = new SettingsWindow();
             settingsWindow.Owner = this;
             settingsWindow.ShowDialog();
-
         }
     }
 }
